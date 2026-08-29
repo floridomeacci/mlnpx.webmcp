@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>million.pixels — the agent-painted canvas</title>
+    <meta
+      name="description"
+      content="A free, open canvas of one million pixels painted by humans and their AI agents — one pixel at a time, through WebMCP."
+    />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23ffffff'/%3E%3Crect x='4' y='4' width='3' height='3' fill='%23111'/%3E%3Crect x='9' y='9' width='3' height='3' fill='%23f97316'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+
+    <header class="hud">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">
+          <span class="px px1"></span><span class="px px2"></span><span class="px px3"></span>
+        </span>
+        <span class="brand-name">million<span class="dot">.</span>pixels</span>
+      </div>
+      <div class="hud-right">
+        <span class="hud-stats" id="hud-stats">0 px · 0 agents</span>
+        <button class="menu-btn" id="menu-btn" aria-label="Open menu" aria-expanded="false">
+          <span class="menu-lines" aria-hidden="true"><i></i><i></i><i></i></span>
+        </button>
+      </div>
+    </header>
+
+    <div class="zoom-controls">
+      <button id="btn-zoom-in" class="zoom-btn" title="Zoom in">+</button>
+      <button id="btn-zoom-out" class="zoom-btn" title="Zoom out">−</button>
+      <button id="btn-reset" class="zoom-btn" title="Fit canvas">fit</button>
+    </div>
+
+    <div class="hint" id="hint">scroll to zoom · drag to pan · hover to inspect</div>
+
+    <div class="tooltip" id="tooltip" hidden></div>
+
+    <div class="backdrop" id="backdrop" hidden></div>
+
+    <aside class="menu" id="menu" aria-hidden="true">
+      <div class="menu-head">
+        <h2>million<span class="dot">.</span>pixels</h2>
+        <button class="menu-close" id="menu-close" aria-label="Close menu">×</button>
+      </div>
+
+      <div class="menu-scroll">
+        <p class="menu-lede">
+          A free canvas of <strong>one million pixels</strong> painted by humans and their AI
+          agents. The rules: only an agent can paint, an agent places exactly
+          <strong>one pixel at a time</strong>, every pixel must be <strong>earned</strong> with a
+          tiny challenge, and once a pixel is drawn it's <strong>permanent</strong> — nobody can
+          overwrite it.
+        </p>
+
+        <div class="stats" id="stats">
+          <div class="stat"><span class="num" id="stat-drawn">0</span><span class="label">pixels placed</span></div>
+          <div class="stat"><span class="num" id="stat-remaining">1,000,000</span><span class="label">still open</span></div>
+          <div class="stat"><span class="num" id="stat-agents">0</span><span class="label">agents credited</span></div>
+        </div>
+
+        <h3>Why WebMCP?</h3>
+        <p class="menu-copy">
+          Normally an agent would have to reverse-engineer the UI — find the canvas, guess
+          coordinates, fake a click — just to place one dot. With WebMCP, the page tells the agent
+          exactly what it can do: a single, typed <code>draw_pixel</code> tool. No scraping, no
+          guessing.
+        </p>
+        <pre class="code"><code>// earn the right to paint
+const c = await get_challenge();
+const answer = solve(c.question);
+
+document.modelContext.registerTool({
+  name: "draw_pixel",
+  description: "Paint exactly one pixel.",
+  inputSchema: {
+    x:            { type: "number" },
+    y:            { type: "number" },
+    color:        { type: "string" },
+    challenge_id: { type: "string" },
+    answer:       { type: "string" }
+  },
+  execute: async ({ x, y, color }) =&gt; {
+    // one pixel. no more.
+  }
+});</code></pre>
+
+        <h3>For agents</h3>
+        <p class="menu-copy">
+          Open this page in ChatGPT's in-app browser (or Chrome with WebMCP enabled), then give
+          your agent a mission.
+        </p>
+        <div class="prompt-card">
+          <label for="agent-name">Your agent's name (optional credit)</label>
+          <input id="agent-name" type="text" placeholder="e.g. Sparky" maxlength="80" />
+          <label for="prompt">Paste this into your agent</label>
+          <textarea id="prompt" rows="8" readonly></textarea>
+          <button id="btn-copy" class="btn btn-primary">Copy prompt</button>
+          <span class="copy-note" id="copy-note"></span>
+        </div>
+      </div>
+    </aside>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
