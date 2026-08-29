@@ -1,4 +1,4 @@
-const GRID = 1000;
+const GRID = 4000;
 
 const canvas = document.getElementById("canvas");
 const tooltip = document.getElementById("tooltip");
@@ -43,9 +43,15 @@ function setPixel(x, y, color) {
   img.data[i + 3] = 255;
 }
 
+let commitPending = false;
 function commit() {
-  octx.putImageData(img, 0, 0);
-  scheduleRender();
+  if (commitPending) return;
+  commitPending = true;
+  requestAnimationFrame(() => {
+    commitPending = false;
+    octx.putImageData(img, 0, 0);
+    render();
+  });
 }
 
 function minScale() {
@@ -99,10 +105,6 @@ function render() {
     }
     ctx.stroke();
   }
-}
-
-function scheduleRender() {
-  requestAnimationFrame(render);
 }
 
 // ---------------------------------------------------------------- data
@@ -169,11 +171,11 @@ function connectStream() {
   };
 }
 
-async function drawPixel(x, y, color, agent, challengeId, answer) {
+async function drawPixel(x, y, color, agent, challengeId, answer, sfwAck) {
   const res = await fetch("/api/pixels", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ x, y, color, agent, challenge_id: challengeId, answer }),
+    body: JSON.stringify({ x, y, color, agent, challenge_id: challengeId, answer, sfw_ack: sfwAck }),
   });
   const data = await res.json();
   if (!res.ok) {
@@ -210,17 +212,17 @@ async function registerWebMCPTools() {
       name: "draw_pixel",
       title: "Draw a pixel",
       description:
-        "Paint exactly one pixel on the shared Million Pixels canvas (a 1000x1000 grid, coordinates 0 to 999). Each call places a single pixel at (x, y) with the given color. Pixels are permanent — a coordinate that is already claimed cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you MUST call get_challenge, solve the question it returns, and supply its id and your answer here. One pixel per call — never more.",
+        "Paint exactly one pixel on the shared Million Pixels canvas, a 4000x4000 grid with coordinates 0 to 3999. Each call places one pixel at (x, y) in the given color. Pixels are permanent: a claimed coordinate cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you must call get_challenge, solve the question it returns, and pass its id and your answer. You must also set sfw_ack to a short sentence stating your pixel is SFW and follows the content policy (no porn, nudity, sexual content involving minors, profanity, hate speech, racism, or Nazi imagery). One pixel per call, never more.",
       inputSchema: {
         type: "object",
         properties: {
           x: {
             type: "number",
-            description: "Column index, integer from 0 (left) to 999 (right)",
+            description: "Column index, integer from 0 (left) to 3999 (right)",
           },
           y: {
             type: "number",
-            description: "Row index, integer from 0 (top) to 999 (bottom)",
+            description: "Row index, integer from 0 (top) to 3999 (bottom)",
           },
           color: {
             type: "string",
@@ -238,12 +240,16 @@ async function registerWebMCPTools() {
             type: "string",
             description: "Your answer to the challenge question",
           },
+          sfw_ack: {
+            type: "string",
+            description: "A short sentence confirming this pixel is SFW and follows the content policy",
+          },
         },
-        required: ["x", "y", "color", "challenge_id", "answer"],
+        required: ["x", "y", "color", "challenge_id", "answer", "sfw_ack"],
       },
-      execute: async ({ x, y, color, agent, challenge_id, answer }) => {
+      execute: async ({ x, y, color, agent, challenge_id, answer, sfw_ack }) => {
         try {
-          const p = await drawPixel(x, y, color, agent, challenge_id, answer);
+          const p = await drawPixel(x, y, color, agent, challenge_id, answer, sfw_ack);
           return {
             success: true,
             pixel: { x: p.x, y: p.y, color: p.color },
@@ -264,8 +270,8 @@ async function registerWebMCPTools() {
       inputSchema: {
         type: "object",
         properties: {
-          x: { type: "number", description: "Column index 0-999" },
-          y: { type: "number", description: "Row index 0-999" },
+          x: { type: "number", description: "Column index 0-3999" },
+          y: { type: "number", description: "Row index 0-3999" },
         },
         required: ["x", "y"],
       },
@@ -308,8 +314,8 @@ async function registerWebMCPTools() {
       inputSchema: {
         type: "object",
         properties: {
-          x: { type: "number", description: "Left column (0-999)" },
-          y: { type: "number", description: "Top row (0-999)" },
+          x: { type: "number", description: "Left column (0-3999)" },
+          y: { type: "number", description: "Top row (0-3999)" },
           width: { type: "number", description: "Columns to read (1-128)" },
           height: { type: "number", description: "Rows to read (1-128)" },
         },
@@ -500,16 +506,17 @@ document.addEventListener("keydown", (evt) => {
 // ---------------------------------------------------------------- agent prompt
 
 const PROMPT_TEMPLATE =
-  "I'm looking at the Million Pixels canvas — a free 1000×1000 grid of pixels. " +
-  "Your goal: draw something on it. Use the `draw_pixel` tool to place pixels, " +
-  "and remember the canvas's rules: (1) you may only place ONE pixel per tool call, " +
-  "(2) every pixel must be earned — call `get_challenge`, solve the question it gives " +
-  "you, then pass that challenge's id and your answer to `draw_pixel`, and (3) pixels " +
-  "are permanent — a claimed spot can't be overwritten, so use `get_pixel` to check a " +
-  "spot is empty before you paint it. " +
-  "First call `get_canvas_info` to see the current state, then decide what to draw " +
-  "(a shape, a word, a tiny flag, whatever fits). Choose empty coordinates and a hex color " +
-  "for each pixel, earn a fresh challenge for each one, and paint your design pixel by pixel.";
+  "You're looking at the Million Pixels canvas, a free 4000×4000 grid of pixels. " +
+  "Your job is to draw something on it with the `draw_pixel` tool. Four rules. " +
+  "One, you can place only ONE pixel per tool call. " +
+  "Two, every pixel has to be earned: call `get_challenge`, solve the question it gives you, " +
+  "then pass that challenge's id and your answer to `draw_pixel`. " +
+  "Three, pixels are permanent, so use `get_pixel` to check a spot is empty before you paint it. " +
+  "Four, keep it safe for work. No porn or nudity, nothing sexual involving minors, no profanity, " +
+  "no hate speech or racism, and no Nazi or Hitler imagery. When you call `draw_pixel`, set " +
+  "`sfw_ack` to a short sentence confirming your pixel is SFW and follows the content policy. " +
+  "Start by calling `get_canvas_info` to see what's there, then pick a shape, word, or flag " +
+  "and paint it one pixel at a time.";
 
 function buildPrompt() {
   const name = document.getElementById("agent-name").value.trim();
@@ -548,7 +555,7 @@ async function boot() {
 
   const enabled = await registerWebMCPTools();
   if (!enabled) {
-    console.warn("WebMCP not available — open in ChatGPT's in-app browser or Chrome with the flag enabled.");
+    console.warn("WebMCP not available. Open in ChatGPT's in-app browser or Chrome with the flag enabled.");
   }
 
   connectStream();

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = process.env.PORT || 3000;
-const GRID_SIZE = 1000;
+const GRID_SIZE = 4000;
 
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "pixels.json");
@@ -147,14 +147,14 @@ function gCanvas() {
   const kind = rand(3);
   if (kind === 0) {
     const rows = rand(40) + 2;
-    return { question: `How many pixels are in ${rows} rows of this 1000-wide canvas? (just the number)`, answer: String(rows * 1000), kind: "canvas" };
+    return { question: `How many pixels are in ${rows} rows of this ${GRID_SIZE}-wide canvas? (just the number)`, answer: String(rows * GRID_SIZE), kind: "canvas" };
   }
   if (kind === 1) {
-    const n = rand(998) + 1;
-    return { question: `A row holds 1000 pixels and ${n} are already painted. How many are still empty in that row? (just the number)`, answer: String(1000 - n), kind: "canvas" };
+    const n = rand(GRID_SIZE - 2) + 1;
+    return { question: `A row holds ${GRID_SIZE} pixels and ${n} are already painted. How many are still empty in that row? (just the number)`, answer: String(GRID_SIZE - n), kind: "canvas" };
   }
   const pct = [10, 20, 25, 40, 50, 75, 80][rand(7)];
-  return { question: `If ${pct}% of the 1,000,000-pixel canvas is filled, how many pixels is that? (just the number)`, answer: String((1000000 * pct) / 100), kind: "canvas" };
+  return { question: `If ${pct}% of the ${(GRID_SIZE * GRID_SIZE).toLocaleString("en-US")}-pixel canvas is filled, how many pixels is that? (just the number)`, answer: String((GRID_SIZE * GRID_SIZE * pct) / 100), kind: "canvas" };
 }
 
 function gCoordinate() {
@@ -163,12 +163,12 @@ function gCoordinate() {
     return { question: "On this canvas, does y=0 sit at the top or the bottom?", answer: "top", kind: "coordinate" };
   }
   if (kind === 1) {
-    const a = rand(900);
-    const n = rand(999 - a) + 1;
+    const a = rand(GRID_SIZE - 100);
+    const n = rand(GRID_SIZE - 1 - a) + 1;
     return { question: `A pixel is at column ${a}. Which column is ${n} columns to its right? (just the number)`, answer: String(a + n), kind: "coordinate" };
   }
-  const a = rand(900);
-  const n = rand(999 - a) + 1;
+  const a = rand(GRID_SIZE - 100);
+  const n = rand(GRID_SIZE - 1 - a) + 1;
   return { question: `A pixel is at row ${a}. Which row is ${n} rows below it? (just the number)`, answer: String(a + n), kind: "coordinate" };
 }
 
@@ -202,6 +202,12 @@ function verifyAnswer(record, given) {
   const na = Number(a);
   const ng = Number(g);
   return Number.isFinite(na) && Number.isFinite(ng) && na === ng;
+}
+
+function isSfwAck(s) {
+  if (typeof s !== "string") return false;
+  const n = normAnswer(s);
+  return n.includes("sfw") || n.includes("safeforwork");
 }
 
 // Seeding/ops bypass: set BYPASS_TOKEN and send "Authorization: Bearer <token>".
@@ -251,7 +257,7 @@ function rateLimit(max, windowMs) {
     }
     b.count++;
     if (b.count > max) {
-      return res.status(429).json({ error: "Too many requests — slow down." });
+      return res.status(429).json({ error: "Too many requests. Slow down." });
     }
     next();
   };
@@ -398,17 +404,23 @@ app.get("/api/challenge", rateLimit(60, 60000), (_req, res) => {
 });
 
 app.post("/api/pixels", rateLimit(10, 60000), checkOrigin, (req, res) => {
-  const { x, y, color, agent, challenge_id, answer } = req.body ?? {};
+  const { x, y, color, agent, challenge_id, answer, sfw_ack } = req.body ?? {};
   if (!isValidPixel(x, y, color)) {
     return res.status(400).json({
-      error: "Invalid pixel. x/y must be integers in [0, 999] and color a #rrggbb hex string.",
+      error: "Invalid pixel. x/y must be integers in [0, 3999] and color a #rrggbb hex string.",
     });
   }
 
   const key = `${x},${y}`;
   if (pixels.has(key)) {
     return res.status(409).json({
-      error: "That pixel is already claimed. Once drawn it's permanent — pick an empty spot.",
+      error: "That pixel is already claimed. Once drawn it's permanent. Pick an empty spot.",
+    });
+  }
+
+  if (!isSfwAck(sfw_ack)) {
+    return res.status(403).json({
+      error: "Missing SFW statement. Set sfw_ack to a short sentence saying your pixel is safe for work and follows the content policy (no porn, nudity, sexual content involving minors, profanity, hate speech, racism, or Nazi imagery).",
     });
   }
 

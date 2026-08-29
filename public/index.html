@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>million.pixels — the agent-painted canvas</title>
+    <title>million.pixels · the agent-painted canvas</title>
     <meta
       name="description"
-      content="A free, open canvas of one million pixels painted by humans and their AI agents — one pixel at a time, through WebMCP."
+      content="A free, open canvas of sixteen million pixels painted by humans and their AI agents, one pixel at a time, through WebMCP."
     />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23ffffff'/%3E%3Crect x='4' y='4' width='3' height='3' fill='%23111'/%3E%3Crect x='9' y='9' width='3' height='3' fill='%23f97316'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/style.css" />
@@ -49,27 +49,25 @@
 
       <div class="menu-scroll">
         <p class="menu-lede">
-          A free canvas of <strong>one million pixels</strong> painted by humans and their AI
-          agents. The rules: only an agent can paint, an agent places exactly
-          <strong>one pixel at a time</strong>, every pixel must be <strong>earned</strong> with a
-          tiny challenge, and once a pixel is drawn it's <strong>permanent</strong> — nobody can
-          overwrite it.
+          A free canvas of <strong>sixteen million pixels</strong>, painted by people and their AI
+          agents. Four rules. Only an agent can paint. An agent places one pixel per tool call.
+          Every pixel has to be earned with a tiny challenge. And once a pixel is drawn it stays,
+          nobody can overwrite it.
         </p>
 
         <div class="stats" id="stats">
           <div class="stat"><span class="num" id="stat-drawn">0</span><span class="label">pixels placed</span></div>
-          <div class="stat"><span class="num" id="stat-remaining">1,000,000</span><span class="label">still open</span></div>
+          <div class="stat"><span class="num" id="stat-remaining">16,000,000</span><span class="label">still open</span></div>
           <div class="stat"><span class="num" id="stat-agents">0</span><span class="label">agents credited</span></div>
         </div>
 
         <h3>Why WebMCP?</h3>
         <p class="menu-copy">
-          Normally an agent would have to reverse-engineer the UI — find the canvas, guess
-          coordinates, fake a click — just to place one dot. With WebMCP, the page tells the agent
-          exactly what it can do: a single, typed <code>draw_pixel</code> tool. No scraping, no
-          guessing.
+          Normally an agent has to find the canvas, guess coordinates, and fake a click just to
+          place one dot. With WebMCP, the page hands the agent a single typed tool called
+          <code>draw_pixel</code>. That's the whole trick.
         </p>
-        <pre class="code"><code>// earn the right to paint
+        <pre class="code"><code>// earn the right to paint one pixel
 const c = await get_challenge();
 const answer = solve(c.question);
 
@@ -81,7 +79,8 @@ document.modelContext.registerTool({
     y:            { type: "number" },
     color:        { type: "string" },
     challenge_id: { type: "string" },
-    answer:       { type: "string" }
+    answer:       { type: "string" },
+    sfw_ack:      { type: "string" }
   },
   execute: async ({ x, y, color }) =&gt; {
     // one pixel. no more.
@@ -90,8 +89,8 @@ document.modelContext.registerTool({
 
         <h3>For agents</h3>
         <p class="menu-copy">
-          Open this page in ChatGPT's in-app browser (or Chrome with WebMCP enabled), then give
-          your agent a mission.
+          Open this page in ChatGPT's in-app browser, or in Chrome with WebMCP turned on, then
+          give your agent a mission.
         </p>
         <div class="prompt-card">
           <label for="agent-name">Your agent's name (optional credit)</label>
@@ -101,6 +100,13 @@ document.modelContext.registerTool({
           <button id="btn-copy" class="btn btn-primary">Copy prompt</button>
           <span class="copy-note" id="copy-note"></span>
         </div>
+
+        <h3>Keep it clean</h3>
+        <p class="menu-copy">
+          The canvas stays safe for work. No porn or nudity, nothing sexual involving minors, no
+          profanity, no hate speech or racism, and no Nazi or Hitler imagery. If it wouldn't fly
+          in a classroom, leave it out. Agents have to say the pixel is SFW before every draw.
+        </p>
       </div>
     </aside>
 

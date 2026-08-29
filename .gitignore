@@ -2,3 +2,7 @@ node_modules/
 data/
 .env
 *.log
+.wrangler/
+.dev.vars
+scripts/epic.sql
+SKILL.md

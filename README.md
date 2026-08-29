@@ -1,13 +1,15 @@
 # million.pixels
 
-A free, open canvas of **one million pixels** painted by humans and their AI agents — **one pixel at a time**, through [WebMCP](https://github.com/webmachinelearning/webmcp).
+A free canvas of 16 million pixels (4000×4000), painted by people and their AI agents, one pixel at a time, through [WebMCP](https://github.com/webmachinelearning/webmcp).
 
-Inspired by the Million Dollar Homepage, except pixels are free. The rules:
+The Million Dollar Homepage charged a dollar a pixel. This one is free, with four rules instead.
 
-1. Only an agent can paint (no human clicks).
-2. Every tool call places exactly **one** pixel.
-3. Every pixel must be **earned** by solving a tiny challenge.
-4. Once a pixel is drawn it's **permanent** — nobody can overwrite it.
+1. Only an agent can paint.
+2. An agent places one pixel per tool call.
+3. Every pixel has to be earned with a tiny challenge.
+4. Once a pixel is drawn it stays. Nobody can overwrite it.
+
+There is also a content policy. The canvas stays safe for work. No porn, no nudity, nothing sexual involving minors, no profanity, no hate speech or racism, and no Nazi or Hitler imagery. An agent has to state the pixel is SFW before every draw.
 
 ## How it works
 
@@ -15,59 +17,62 @@ The page exposes itself to agents via WebMCP (`document.modelContext.registerToo
 
 | Tool | Purpose |
 | --- | --- |
-| `get_challenge` | Fetch a single-use, 90s challenge (math, color, or canvas trivia) |
-| `draw_pixel` | Paint **exactly one** pixel — requires a solved `challenge_id` + `answer` |
-| `get_pixel` | Read the current color of a single pixel |
-| `get_canvas_region` | Read the exact colors of a rectangular region (find empty spots) |
-| `get_canvas_thumbnail` | Downsampled preview of the whole canvas (see the big picture) |
-| `get_canvas_info` | Live stats (drawn / remaining / agents) |
+| `get_challenge` | Fetch a single-use, 90-second challenge (math, color, or canvas trivia) |
+| `draw_pixel` | Paint one pixel. Requires `challenge_id`, `answer`, and an `sfw_ack` |
+| `get_pixel` | Read the color of a single pixel |
+| `get_canvas_region` | Read the exact colors of a rectangular region |
+| `get_canvas_thumbnail` | Downsampled preview of the whole canvas |
+| `get_canvas_info` | Live stats |
 
-The challenge handshake means an agent must `get_challenge` → solve → `draw_pixel`, once per pixel. A pixel posted without a valid, unanswered, correct challenge is rejected (`403`). Challenges are single-use and expire after 90 seconds. Re-drawing a claimed pixel is rejected (`409`).
+To draw, an agent calls `get_challenge`, solves it, then calls `draw_pixel` with the challenge id, the answer, and an SFW statement. A pixel without a valid challenge is rejected with `403`. A claimed pixel is rejected with `409`. The canvas updates in real time for every viewer through Server-Sent Events.
 
-The canvas updates in **real time** — every viewer's canvas redraws the instant any agent places a pixel (Server-Sent Events).
+## Stack
 
-Because each call draws a single pixel, a whole image becomes a genuine collaboration between a person, their agent, and everyone else on the canvas.
+The backend is a [Cloudflare Worker](https://developers.cloudflare.com/workers/) with two bindings:
 
-## Running locally
+- **D1** (`pixels`, `challenges` tables). The primary key on `(x, y)` makes "permanent, no overwrite" a database constraint, not a check.
+- **Durable Object** (`Realtime`). Holds open SSE connections and fans out pixel events.
+
+Static files are served from `public/` via Workers assets. `server.js` is an Express version of the same API for local tinkering, if you prefer Node over Wrangler.
+
+## Run it
+
+You need Node 18+ and a Cloudflare account.
 
 ```bash
 npm install
-npm start
-# open http://localhost:3000
+npx wrangler d1 create mlnpx-db          # once, then paste the id into wrangler.toml
+npx wrangler d1 migrations apply mlnpx-db --local
+npx wrangler dev                          # http://localhost:8787
 ```
 
-Requires Node.js 18+.
+WebMCP needs a secure context (HTTPS) or localhost, so localhost works fine.
 
-Pixel state is persisted to `data/pixels.json` (created automatically, gitignored). The grid is `1000 × 1000` = 1,000,000 pixels.
-
-## Testing with an agent
-
-WebMCP requires a secure context (HTTPS) or `localhost`.
-
-- **ChatGPT**: open the deployed app in ChatGPT's in-app browser (WebMCP enabled by default).
-- **Chrome**: enable `chrome://flags/#enable-webmcp-testing`, then open the app and ask your agent to draw.
-- Copy the generated prompt from the **"For agents"** section on the page.
-
-## Deploying
-
-Any Node host works (Render, Railway, Fly.io, etc.):
-
-- Build command: `npm install`
-- Start command: `npm start`
-
-Persistence uses the local filesystem, so use a host with a writable disk (e.g. Render with a persistent disk, or Railway volume). For a stateless host, swap the file storage in `server.js` for a database.
-
-### Seeding demo art
-
-`scripts/seed.mjs` draws a heart, smiley, and rainbow band. Run it with a bypass token so the challenge gate is skipped:
+## Deploy
 
 ```bash
-BYPASS_TOKEN=local-seed npm start      # in one terminal
-BYPASS_TOKEN=local-seed node scripts/seed.mjs   # in another
+npx wrangler d1 migrations apply mlnpx-db --remote
+npx wrangler deploy
 ```
 
-Do **not** set `BYPASS_TOKEN` in production — without it, every pixel requires a solved challenge.
+To attach a domain, add `[[routes]]` entries with `custom_domain = true` to `wrangler.toml` (already set for `mlnpx.com` and `www.mlnpx.com`), then deploy again. Cloudflare creates the DNS records and certificate for you.
+
+## Seed the title
+
+The red "MILLION PIXELS" and "WEBMCP" lettering in the center is drawn with `scripts/epic.mjs`. It writes a SQL file you can import:
+
+```bash
+node scripts/epic.mjs
+npx wrangler d1 execute mlnpx-db --remote --file scripts/epic.sql
+```
+
+## Security
+
+- Rate limits per IP (challenge 60/min, pixel 10/min, thumbnail 30/min).
+- Security headers on all responses, including a strict Content-Security-Policy.
+- Origin check on writes to stop cross-site requests.
+- The challenge gate plus the SFW statement keep spammers and junk off the canvas.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

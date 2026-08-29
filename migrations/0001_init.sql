@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS pixels (
+  x INTEGER NOT NULL,
+  y INTEGER NOT NULL,
+  color TEXT NOT NULL,
+  agent TEXT,
+  ts INTEGER NOT NULL,
+  PRIMARY KEY (x, y)
+);
+
+CREATE TABLE IF NOT EXISTS challenges (
+  id TEXT PRIMARY KEY,
+  answer TEXT NOT NULL,
+  expires INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pixels_ts ON pixels (ts);

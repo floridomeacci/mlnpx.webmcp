@@ -14,5 +14,8 @@
   "dependencies": {
     "express": "^4.19.2"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.127.1"
+  }
 }

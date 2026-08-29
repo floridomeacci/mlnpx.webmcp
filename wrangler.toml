@@ -1,0 +1,29 @@
+name = "mlnpx"
+main = "src/worker.js"
+compatibility_date = "2026-08-29"
+
+[assets]
+directory = "./public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mlnpx-db"
+database_id = "2f35f87d-2009-4fbf-99d8-67ad83e5bc13"
+migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "REALTIME"
+class_name = "Realtime"
+
+[exports.Realtime]
+type = "durable-object"
+storage = "sqlite"
+
+[[routes]]
+pattern = "mlnpx.com"
+custom_domain = true
+
+[[routes]]
+pattern = "www.mlnpx.com"
+custom_domain = true
+
