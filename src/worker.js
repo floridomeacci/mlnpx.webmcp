@@ -111,6 +111,19 @@ function limited(request, max, windowMs) {
   return b.n <= max;
 }
 
+const dayBuckets = new Map();
+function limitedDay(request, max) {
+  const now = Date.now();
+  const key = request.headers.get("CF-Connecting-IP") || "unknown";
+  const b = dayBuckets.get(key);
+  if (!b || b.reset <= now) {
+    dayBuckets.set(key, { n: 1, reset: now + 86400000 });
+    return true;
+  }
+  b.n++;
+  return b.n <= max;
+}
+
 function isValidPixel(x, y, color) {
   return Number.isInteger(x) && Number.isInteger(y) &&
     x >= 0 && x < GRID && y >= 0 && y < GRID &&
@@ -134,6 +147,7 @@ export class Realtime {
     this.state = state;
     this.env = env;
     this.clients = new Set();
+    this.counts = new Map(); // "pixels:<hourKey>" -> count
   }
 
   async fetch(request) {
@@ -143,13 +157,42 @@ export class Realtime {
       await this.broadcast(pixel);
       return new Response("ok");
     }
+    if (url.pathname === "/budget") {
+      const body = await request.json();
+      return this.checkBudget(body);
+    }
     if (url.pathname === "/api/stream") {
       return this.serveStream(request);
     }
     return new Response("not found", { status: 404 });
   }
 
+  checkBudget({ key, max }) {
+    const hourKey = Math.floor(Date.now() / 3600000);
+    const k = key + ":" + hourKey;
+    const n = (this.counts.get(k) || 0) + 1;
+    this.counts.set(k, n);
+    if (this.counts.size > 100) {
+      const cutoff = hourKey - 2;
+      for (const ck of this.counts.keys()) {
+        const last = Number(ck.slice(ck.lastIndexOf(":") + 1));
+        if (last < cutoff) this.counts.delete(ck);
+      }
+    }
+    const ok = n <= max;
+    return new Response(JSON.stringify({ ok, count: n, max }), {
+      status: ok ? 200 : 429,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   serveStream(request) {
+    if (this.clients.size >= 500) {
+      return new Response(JSON.stringify({ error: "Too many live connections." }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     const { readable, writable } = new TransformStream();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
@@ -213,6 +256,10 @@ async function readBody(request) {
   return request.json();
 }
 
+// in-memory caches (per-isolate). These cut D1 read cost on hot endpoints.
+let thumbCache = null; // { size, ts, data }
+let pixelsCache = null; // { ts, data }
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -234,12 +281,16 @@ export default {
 
     if (path === "/api/pixels" && method === "GET") {
       const since = Number(url.searchParams.get("since"));
-      let rows;
       if (Number.isFinite(since)) {
-        rows = await env.DB.prepare("SELECT x, y, color, agent, ts FROM pixels WHERE ts > ?").bind(since).all();
-      } else {
-        rows = await env.DB.prepare("SELECT x, y, color, agent, ts FROM pixels").all();
+        const rows = await env.DB.prepare("SELECT x, y, color, agent, ts FROM pixels WHERE ts > ?").bind(since).all();
+        return json(rows.results);
       }
+      if (!limited(request, 30, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (pixelsCache && Date.now() - pixelsCache.ts < 3000) {
+        return json(pixelsCache.data);
+      }
+      const rows = await env.DB.prepare("SELECT x, y, color, agent, ts FROM pixels").all();
+      pixelsCache = { ts: Date.now(), data: rows.results };
       return json(rows.results);
     }
 
@@ -259,7 +310,7 @@ export default {
       const h = Number(url.searchParams.get("h"));
       if ([x, y, w, h].some(Number.isNaN) || w < 1 || h < 1 || w > 128 || h > 128 || w * h > 4096 ||
           x < 0 || y < 0 || x + w > GRID || y + h > GRID) {
-        return json({ error: "region must be inside 0..999, w/h in 1..128, w*h <= 4096" }, 400);
+        return json({ error: "region must be inside 0..3999, w/h in 1..128, w*h <= 4096" }, 400);
       }
       const rows = await env.DB.prepare("SELECT x, y, color FROM pixels WHERE x >= ? AND x < ? AND y >= ? AND y < ?")
         .bind(x, x + w, y, y + h).all();
@@ -276,6 +327,9 @@ export default {
     if (path === "/api/thumbnail" && method === "GET") {
       if (!limited(request, 30, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
       const size = Math.min(100, Math.max(1, Number(url.searchParams.get("size")) || 64));
+      if (thumbCache && thumbCache.size === size && Date.now() - thumbCache.ts < 10000) {
+        return json(thumbCache.data);
+      }
       const block = Math.ceil(GRID / size);
       const rows = await env.DB.prepare("SELECT x, y, color FROM pixels").all();
       const sums = new Map();
@@ -301,11 +355,17 @@ export default {
         }
         grid.push(row);
       }
-      return json({ size, rows: grid });
+      const data = { size, rows: grid };
+      thumbCache = { size, ts: Date.now(), data };
+      return json(data);
     }
 
     if (path === "/api/challenge" && method === "GET") {
       if (!limited(request, 60, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      const paused = await env.DB.prepare("SELECT value FROM settings WHERE key = 'paused'").first();
+      if (paused && paused.value === "1") {
+        return json({ error: "The canvas is paused right now. Try again later." }, 503);
+      }
       await env.DB.prepare("DELETE FROM challenges WHERE expires < ?").bind(Date.now()).run();
       const c = newChallenge();
       await env.DB.prepare("INSERT INTO challenges (id, answer, expires) VALUES (?, ?, ?)")
@@ -315,7 +375,22 @@ export default {
 
     if (path === "/api/pixels" && method === "POST") {
       if (!limited(request, 10, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limitedDay(request, 500)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
       if (!checkOrigin(request)) return json({ error: "Cross-origin requests are not allowed." }, 403);
+
+      // emergency pause switch (set settings.paused = '1' in D1 to stop all writes)
+      const paused = await env.DB.prepare("SELECT value FROM settings WHERE key = 'paused'").first();
+      if (paused && paused.value === "1") {
+        return json({ error: "The canvas is paused right now. Try again later." }, 503);
+      }
+
+      // global write budget: caps total cost regardless of how many IPs a botnet uses
+      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 10000);
+      const hub = env.REALTIME.get(env.REALTIME.idFromName("hub"));
+      const b = await hub.fetch("https://realtime/budget", { method: "POST", body: JSON.stringify({ key: "pixels", max: budget }) });
+      if (b.status === 429) {
+        return json({ error: "The canvas is resting. Too many pixels this hour, try again soon." }, 503);
+      }
 
       let body;
       try {
@@ -361,7 +436,6 @@ export default {
       }
 
       // realtime broadcast (fire-and-forget)
-      const hub = env.REALTIME.get(env.REALTIME.idFromName("hub"));
       ctx.waitUntil(hub.fetch("https://realtime/broadcast", { method: "POST", body: JSON.stringify(pixel) }));
 
       return json({ success: true, pixel }, 201);

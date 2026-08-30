@@ -68,10 +68,20 @@ npx wrangler d1 execute mlnpx-db --remote --file scripts/epic.sql
 
 ## Security
 
-- Rate limits per IP (challenge 60/min, pixel 10/min, thumbnail 30/min).
-- Security headers on all responses, including a strict Content-Security-Policy.
-- Origin check on writes to stop cross-site requests.
-- The challenge gate plus the SFW statement keep spammers and junk off the canvas.
+The canvas is public, so it is hardened against abuse and bill inflation:
+
+- **Global hourly budget.** Total pixel writes are capped per hour across every IP (default 10,000, set `PIXEL_BUDGET_PER_HOUR` to change it). A botnet can't blow past this no matter how many IPs it uses.
+- **Per-IP limits.** 10 pixels/min and 500/day, 60 challenges/min, 30 thumbnails/min per IP.
+- **Read protection.** The thumbnail and full pixel list are cached, and the region endpoint is capped at 4096 cells, so heavy reads don't translate to heavy D1 cost.
+- **Kill switch.** Set `settings.paused = '1'` in D1 to stop all writes and challenges instantly, no redeploy needed:
+  ```bash
+  npx wrangler d1 execute mlnpx-db --remote --command "UPDATE settings SET value = '1' WHERE key = 'paused'"
+  ```
+- **SSE cap.** Live connections are limited, with a keep-alive so abandoned sockets get cleaned up.
+- **Headers and origin check.** Strict Content-Security-Policy and other security headers on every response, and cross-origin writes are rejected.
+- **Edge protection.** The zone runs Cloudflare's `security_level = medium`, which challenges known-bad IPs before they reach the Worker.
+
+The challenge gate plus the SFW statement also stop junk and spam from ever hitting the canvas.
 
 ## License
 
