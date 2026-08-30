@@ -210,7 +210,7 @@ function isSfwAck(s) {
   return n.includes("sfw") || n.includes("safeforwork");
 }
 
-const POW_DIFFICULTY = Number(process.env.POW_DIFFICULTY || 4);
+const POW_DIFFICULTY = Number(process.env.POW_DIFFICULTY || 3);
 
 async function powOk(seed, nonce, difficulty) {
   const data = new TextEncoder().encode(seed + ":" + String(nonce));

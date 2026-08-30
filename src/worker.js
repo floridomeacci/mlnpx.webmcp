@@ -133,6 +133,31 @@ function limitedDay(request, name, max) {
   return b.n <= max;
 }
 
+// count-aware rate limit: consumes `n` tokens (one per pixel) instead of one per request.
+function limitedN(request, name, n, max, windowMs) {
+  const now = Date.now();
+  const key = (request.headers.get("CF-Connecting-IP") || "unknown") + ":" + name;
+  const b = buckets.get(key);
+  if (!b || b.reset <= now) {
+    buckets.set(key, { n, reset: now + windowMs });
+    return n <= max;
+  }
+  b.n += n;
+  return b.n <= max;
+}
+
+function limitedDayN(request, name, n, max) {
+  const now = Date.now();
+  const key = (request.headers.get("CF-Connecting-IP") || "unknown") + ":" + name;
+  const b = dayBuckets.get(key);
+  if (!b || b.reset <= now) {
+    dayBuckets.set(key, { n, reset: now + 86400000 });
+    return n <= max;
+  }
+  b.n += n;
+  return b.n <= max;
+}
+
 function isValidPixel(x, y, color) {
   return Number.isInteger(x) && Number.isInteger(y) &&
     x >= 0 && x < GRID && y >= 0 && y < GRID &&
@@ -166,6 +191,11 @@ export class Realtime {
       await this.broadcast(pixel);
       return new Response("ok");
     }
+    if (url.pathname === "/broadcast-many") {
+      const pixels = await request.json();
+      for (const p of pixels) await this.broadcast(p);
+      return new Response("ok");
+    }
     if (url.pathname === "/budget") {
       const body = await request.json();
       return this.checkBudget(body);
@@ -176,11 +206,12 @@ export class Realtime {
     return new Response("not found", { status: 404 });
   }
 
-  checkBudget({ key, max }) {
+  checkBudget({ key, max, n }) {
+    const amount = Number(n) || 1;
     const hourKey = Math.floor(Date.now() / 3600000);
     const k = key + ":" + hourKey;
-    const n = (this.counts.get(k) || 0) + 1;
-    this.counts.set(k, n);
+    const count = (this.counts.get(k) || 0) + amount;
+    this.counts.set(k, count);
     if (this.counts.size > 100) {
       const cutoff = hourKey - 2;
       for (const ck of this.counts.keys()) {
@@ -188,8 +219,8 @@ export class Realtime {
         if (last < cutoff) this.counts.delete(ck);
       }
     }
-    const ok = n <= max;
-    return new Response(JSON.stringify({ ok, count: n, max }), {
+    const ok = count <= max;
+    return new Response(JSON.stringify({ ok, count, max }), {
       status: ok ? 200 : 429,
       headers: { "Content-Type": "application/json" },
     });
@@ -404,7 +435,84 @@ export default {
     }
 
     if (path === "/api/pow" && method === "GET") {
-      return json({ difficulty: Number(env.POW_DIFFICULTY || 4) });
+      return json({ difficulty: Number(env.POW_DIFFICULTY || 3) });
+    }
+
+    if (path === "/api/pixels/batch" && method === "POST") {
+      if (!checkOrigin(request)) return json({ error: "Cross-origin requests are not allowed." }, 403);
+
+      let body;
+      try {
+        body = await readBody(request);
+      } catch {
+        return json({ error: "Invalid JSON body." }, 400);
+      }
+      const { pixels, challenge_id, answer, sfw_ack, nonce, agent } = body || {};
+
+      if (!Array.isArray(pixels) || pixels.length < 1 || pixels.length > 50) {
+        return json({ error: "pixels must be an array of 1 to 50 pixel objects." }, 400);
+      }
+      for (const p of pixels) {
+        if (!p || !isValidPixel(p.x, p.y, p.color)) {
+          return json({ error: "Invalid pixel in batch. x/y must be integers in [0, 999] and color a #rrggbb hex string." }, 400);
+        }
+      }
+
+      if (!limitedN(request, "pixels", pixels.length, 600, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limitedDayN(request, "pixels", pixels.length, 5000)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
+
+      const paused = await env.DB.prepare("SELECT value FROM settings WHERE key = 'paused'").first();
+      if (paused && paused.value === "1") {
+        return json({ error: "The canvas is paused right now. Try again later." }, 503);
+      }
+
+      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 10000);
+      const hub = env.REALTIME.get(env.REALTIME.idFromName("hub"));
+      const b = await hub.fetch("https://realtime/budget", { method: "POST", body: JSON.stringify({ key: "pixels", max: budget, n: pixels.length }) });
+      if (b.status === 429) {
+        return json({ error: "The canvas is resting. Too many pixels this hour, try again soon." }, 503);
+      }
+
+      if (!isSfwAck(sfw_ack)) {
+        return json({ error: "Missing SFW statement. Set sfw_ack to a short sentence confirming the design is safe for work and appropriate for all ages." }, 403);
+      }
+
+      const ch = await env.DB.prepare("SELECT answer FROM challenges WHERE id = ? AND expires > ?").bind(challenge_id, Date.now()).first();
+      if (!ch) {
+        return json({ error: "No valid challenge. Call get_challenge first, then pass its id and your answer." }, 403);
+      }
+      if (!verifyAnswer(ch.answer, answer)) {
+        return json({ error: "Incorrect challenge answer. Call get_challenge for a fresh one and try again." }, 403);
+      }
+      const difficulty = Number(env.POW_DIFFICULTY || 3);
+      if (nonce == null || !(await powOk(challenge_id, nonce, difficulty))) {
+        return json({ error: "Proof of work failed. Call get_challenge for a fresh one and try again." }, 403);
+      }
+      await env.DB.prepare("DELETE FROM challenges WHERE id = ?").bind(challenge_id).run();
+
+      const cleanAgent = typeof agent === "string" && agent.trim() ? agent.trim().slice(0, 80) : null;
+      const ts = Date.now();
+
+      const stmts = pixels.map((p) =>
+        env.DB.prepare("INSERT OR IGNORE INTO pixels (x, y, color, agent, ts) VALUES (?, ?, ?, ?, ?)")
+          .bind(p.x, p.y, p.color.toLowerCase(), cleanAgent, ts)
+      );
+      const results = await env.DB.batch(stmts);
+
+      let drawn = 0;
+      const drawnPixels = [];
+      pixels.forEach((p, i) => {
+        if (results[i].meta.changes > 0) {
+          drawn++;
+          drawnPixels.push({ x: p.x, y: p.y, color: p.color.toLowerCase(), agent: cleanAgent, ts });
+        }
+      });
+
+      if (drawnPixels.length) {
+        ctx.waitUntil(hub.fetch("https://realtime/broadcast-many", { method: "POST", body: JSON.stringify(drawnPixels) }));
+      }
+
+      return json({ success: true, drawn, skipped: pixels.length - drawn, pixels: drawnPixels }, 201);
     }
 
     if (path === "/api/pixels" && method === "POST") {
@@ -456,7 +564,7 @@ export default {
       }
 
       // Bitcoin-style proof of work: each pixel costs real CPU, so big drawings are impractical.
-      const difficulty = Number(env.POW_DIFFICULTY || 4);
+      const difficulty = Number(env.POW_DIFFICULTY || 3);
       if (nonce == null || !(await powOk(challenge_id, nonce, difficulty))) {
         return json({ error: "Proof of work failed. Call get_challenge for a fresh one and try again." }, 403);
       }

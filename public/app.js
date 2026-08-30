@@ -205,7 +205,7 @@ async function computePow(challengeId) {
   }
 }
 
-async function drawPixel(x, y, color, agent, challengeId, answer, sfwAck) {
+async function postPixel(x, y, color, agent, challengeId, answer, sfwAck) {
   const nonce = await computePow(challengeId);
   const body = JSON.stringify({ x, y, color, agent, challenge_id: challengeId, answer, sfw_ack: sfwAck, nonce });
   let res;
@@ -220,14 +220,43 @@ async function drawPixel(x, y, color, agent, challengeId, answer, sfwAck) {
     if (res.status !== 429) break;
     await new Promise((r) => setTimeout(r, 1200));
   }
+  if (res.status === 409) return null; // already claimed
   if (!res.ok) {
     throw new Error(data.error || "Failed to draw pixel");
   }
-  const p = data.pixel;
-  applyPixel(p);
+  applyPixel(data.pixel);
   commit();
   loadStats();
-  return p;
+  return data.pixel;
+}
+
+// a proposed design is held in memory across tool calls so the agent can
+// submit it once and then poll it to completion by solving challenges.
+const BATCH_SIZE = 20;
+const DESIGN_TTL_MS = 10 * 60 * 1000; // unfinished designs expire after 10 minutes
+
+let pendingDesign = null;
+let designCounter = 0;
+
+async function fetchChallenge() {
+  return (await (await fetch("/api/challenge")).json());
+}
+
+async function submitBatch(d, challengeId, answer) {
+  const batch = d.pixels.slice(d.index, d.index + BATCH_SIZE);
+  if (!batch.length) return null;
+  const nonce = await computePow(challengeId);
+  const res = await fetch("/api/pixels/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pixels: batch, challenge_id: challengeId, answer, sfw_ack: d.sfwAck, nonce, agent: d.agent }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to draw batch");
+  for (const p of data.pixels || []) applyPixel(p);
+  commit();
+  loadStats();
+  return data;
 }
 
 // ---------------------------------------------------------------- WebMCP
@@ -291,7 +320,10 @@ async function registerWebMCPTools() {
       },
       execute: async ({ x, y, color, agent, challenge_id, answer, sfw_ack }) => {
         try {
-          const p = await drawPixel(x, y, color, agent, challenge_id, answer, sfw_ack);
+          const p = await postPixel(x, y, color, agent, challenge_id, answer, sfw_ack);
+          if (!p) {
+            return { success: false, error: "That pixel is already claimed. Pick an empty spot." };
+          }
           return {
             success: true,
             pixel: { x: p.x, y: p.y, color: p.color },
@@ -406,6 +438,184 @@ async function registerWebMCPTools() {
         };
       },
       annotations: { readOnlyHint: true },
+    });
+
+    await document.modelContext.registerTool({
+      name: "preview_design",
+      title: "Preview a design",
+      description:
+        "Render a proposed set of pixels as ASCII art so you can check the shape before committing it. Pass a list of pixels (x, y, hex color). Filled cells are #, empty cells are a dot.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          pixels: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                x: { type: "number" },
+                y: { type: "number" },
+                color: { type: "string" },
+              },
+              required: ["x", "y"],
+            },
+          },
+        },
+        required: ["pixels"],
+      },
+      execute: async ({ pixels }) => {
+        const pts = (pixels || []).map((p) => [Number(p.x), Number(p.y)]);
+        if (!pts.length) return { error: "No pixels provided." };
+        const xs = pts.map((p) => p[0]);
+        const ys = pts.map((p) => p[1]);
+        const minX = Math.min(...xs), maxX = Math.max(...xs);
+        const minY = Math.min(...ys), maxY = Math.max(...ys);
+        const set = new Set(pts.map(([x, y]) => `${x},${y}`));
+        const lines = [];
+        for (let y = minY; y <= maxY; y++) {
+          let line = "";
+          for (let x = minX; x <= maxX; x++) line += set.has(`${x},${y}`) ? "#" : ".";
+          lines.push(line);
+        }
+        return { width: maxX - minX + 1, height: maxY - minY + 1, art: lines.join("\n") };
+      },
+      annotations: { readOnlyHint: true },
+    });
+
+    await document.modelContext.registerTool({
+      name: "propose_drawing",
+      title: "Propose a drawing",
+      description:
+        "Submit a whole design in a single call. Pass a list of pixels (x, y, hex color) and an sfw_ack confirming the design is safe for work and appropriate for all ages. The pixels are drawn in order, line by line from top to bottom. This returns a design_id and the first challenge. Keep polling with poll_design and solving each challenge until the design is complete.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          pixels: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                x: { type: "number" },
+                y: { type: "number" },
+                color: { type: "string" },
+              },
+              required: ["x", "y", "color"],
+            },
+          },
+          sfw_ack: {
+            type: "string",
+            description: "Confirm the whole design is safe for work and appropriate for all ages",
+          },
+          agent: { type: "string", description: "Optional name to credit" },
+        },
+        required: ["pixels", "sfw_ack"],
+      },
+      execute: async ({ pixels, sfw_ack, agent }) => {
+        const sorted = [...(pixels || [])].sort((a, b) => a.y - b.y || a.x - b.x);
+        if (!sorted.length) return { success: false, error: "No pixels provided." };
+        designCounter++;
+        const c = await fetchChallenge();
+        pendingDesign = {
+          id: designCounter,
+          pixels: sorted,
+          index: 0,
+          drawn: 0,
+          skipped: 0,
+          sfwAck: sfw_ack,
+          agent: agent || null,
+          challenge: { id: c.id, question: c.question },
+          expiresAt: Date.now() + DESIGN_TTL_MS,
+        };
+        return {
+          success: true,
+          design_id: designCounter,
+          total: sorted.length,
+          totalChallenges: Math.ceil(sorted.length / BATCH_SIZE),
+          message: "Design proposed. Poll it with poll_design and solve each challenge to build it. Unfinished designs expire after 10 minutes.",
+          challenge: { id: c.id, question: c.question },
+        };
+      },
+      annotations: { readOnlyHint: false },
+    });
+
+    await document.modelContext.registerTool({
+      name: "poll_design",
+      title: "Poll a design",
+      description:
+        "Poll a proposed design by its design_id. If you pass the challenge_id and answer of the challenge you just solved, the next batch of pixels is drawn and you get the next challenge. If you pass nothing, you get the current challenge again. Keep polling and solving until it returns done: true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          design_id: { type: "number", description: "The id returned by propose_drawing" },
+          challenge_id: { type: "string", description: "The id of the challenge you solved (optional on first poll)" },
+          answer: { type: "string", description: "Your answer to the challenge question" },
+        },
+        required: ["design_id"],
+      },
+      execute: async ({ design_id, challenge_id, answer }) => {
+        if (!pendingDesign || pendingDesign.id !== design_id) {
+          return { success: false, error: "No active design with that id. Call propose_drawing first." };
+        }
+        const d = pendingDesign;
+
+        if (Date.now() > d.expiresAt) {
+          pendingDesign = null;
+          return { success: false, error: "This design expired. Propose it again." };
+        }
+
+        // just polling, no answer yet
+        if (challenge_id == null && answer == null) {
+          return {
+            success: true,
+            done: false,
+            drawn: d.drawn,
+            skipped: d.skipped,
+            total: d.pixels.length,
+            challenge: d.challenge,
+          };
+        }
+
+        if (challenge_id !== d.challenge.id) {
+          return { success: false, error: "That challenge is not the current one for this design. Poll again to get the current challenge." };
+        }
+
+        let result;
+        try {
+          result = await submitBatch(d, challenge_id, answer);
+        } catch (err) {
+          return { success: false, error: err.message, drawn: d.drawn, skipped: d.skipped, total: d.pixels.length };
+        }
+
+        d.drawn += result.drawn;
+        d.skipped += result.skipped;
+        d.index += Math.min(BATCH_SIZE, d.pixels.length - d.index);
+
+        if (d.index >= d.pixels.length) {
+          pendingDesign = null;
+          return {
+            success: true,
+            done: true,
+            drawn: d.drawn,
+            skipped: d.skipped,
+            total: d.pixels.length,
+            message: "Design complete.",
+          };
+        }
+
+        const c = await fetchChallenge();
+        d.challenge = { id: c.id, question: c.question };
+        d.expiresAt = Date.now() + DESIGN_TTL_MS;
+
+        return {
+          success: true,
+          done: false,
+          drawn: d.drawn,
+          skipped: d.skipped,
+          total: d.pixels.length,
+          challenge: d.challenge,
+        };
+      },
+      annotations: { readOnlyHint: false },
     });
 
     return true;
