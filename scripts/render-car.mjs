@@ -1,26 +1,47 @@
-// Render a car bitmap as ASCII to eyeball the silhouette before drawing.
+// Render a full car (body + wheels + stripe) as ASCII to eyeball it before drawing.
+const W = 48, H = 22;
+
 const ART = [
-  "................................................",
-  "...........................GGGGGG................",
-  ".........................GGGGGGGGGGG............",
-  "........................GGGGGGGGGGGGG...........",
-  ".......................BBBBBBBBBBBBBBBBBB.......",
-  "...........BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  ".........BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  "........BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  ".......BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  ".......SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
-  ".......BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  "........BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  ".........BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-  "..........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-  "...........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD.",
-  "............DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD..",
-  ".............DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD....",
-  "..............DDDDDDDDDDDDDDDDDDDDDDDDDDDD.....",
+  "................................GGGGG........",
+  "...............................GGGGGGG.......",
+  "..............................GGGGGGGGG......",
+  ".............................GGGGGGGGGGG.....",
+  "...................BBBBBBBBBBBBBBBBBBBBBB....",
+  "..........BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB.",
+  ".........BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  "........BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  "........SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+  "........BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  ".........BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  "..........BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  "...........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+  "............DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD.",
+  ".............DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD..",
+  "..............DDDDDDDDDDDDDDDDDDDDDDDDDDDD...",
+  "...............DDDDDDDDDDDDDDDDDDDDDDDDDD....",
+  "................DDDDDDDDDDDDDDDDDDDDDDDD.....",
 ];
 
-for (const row of ART) {
-  console.log(row.replace(/\./g, " ").replace(/B/g, "#").replace(/S/g, "=").replace(/G/g, "%").replace(/D/g, "+"));
+const grid = Array.from({ length: H }, () => Array(W).fill(" "));
+for (let r = 0; r < ART.length; r++) {
+  for (let c = 0; c < ART[r].length; c++) {
+    const ch = ART[r][c];
+    const map = { B: "#", S: "=", D: "+", G: "%" };
+    if (map[ch]) grid[r][c] = map[ch];
+  }
 }
-console.log("\ncols:", ART[0].length, "rows:", ART.length);
+
+function wheel(cx, cy, r) {
+  for (let y = cy - r; y <= cy + r; y++) {
+    for (let x = cx - r; x <= cx + r; x++) {
+      const d = (x - cx) ** 2 + (y - cy) ** 2;
+      if (d <= r * r) grid[y][x] = d <= 2 * 2 ? "." : "O";
+    }
+  }
+}
+
+wheel(14, 15, 5);
+wheel(36, 15, 5);
+
+for (const row of grid) console.log(row.join(""));
+console.log("\ncols:", W, "rows:", H);

@@ -409,7 +409,7 @@ app.get("/api/thumbnail", (req, res) => {
   res.json({ size, rows });
 });
 
-app.get("/api/challenge", rateLimit("challenge", 600, 60000), (_req, res) => {
+app.get("/api/challenge", rateLimit("challenge", 6000, 60000), (_req, res) => {
   const c = newChallenge();
   res.json({ id: c.id, question: c.question, kind: c.kind });
 });
@@ -418,7 +418,7 @@ app.get("/api/pow", (_req, res) => {
   res.json({ difficulty: POW_DIFFICULTY });
 });
 
-app.post("/api/pixels", rateLimit("pixels", 600, 60000), checkOrigin, async (req, res) => {
+app.post("/api/pixels", rateLimit("pixels", 6000, 60000), checkOrigin, async (req, res) => {
   const { x, y, color, agent, challenge_id, answer, sfw_ack, nonce } = req.body ?? {};
   if (!isValidPixel(x, y, color)) {
     return res.status(400).json({

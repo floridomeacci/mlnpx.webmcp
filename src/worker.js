@@ -422,7 +422,7 @@ export default {
     }
 
     if (path === "/api/challenge" && method === "GET") {
-      if (!limited(request, "challenge", 600, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limited(request, "challenge", 6000, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
       const paused = await env.DB.prepare("SELECT value FROM settings WHERE key = 'paused'").first();
       if (paused && paused.value === "1") {
         return json({ error: "The canvas is paused right now. Try again later." }, 503);
@@ -458,15 +458,15 @@ export default {
         }
       }
 
-      if (!limitedN(request, "pixels", pixels.length, 600, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
-      if (!limitedDayN(request, "pixels", pixels.length, 5000)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
+      if (!limitedN(request, "pixels", pixels.length, 6000, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limitedDayN(request, "pixels", pixels.length, 20000)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
 
       const paused = await env.DB.prepare("SELECT value FROM settings WHERE key = 'paused'").first();
       if (paused && paused.value === "1") {
         return json({ error: "The canvas is paused right now. Try again later." }, 503);
       }
 
-      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 10000);
+      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 20000);
       const hub = env.REALTIME.get(env.REALTIME.idFromName("hub"));
       const b = await hub.fetch("https://realtime/budget", { method: "POST", body: JSON.stringify({ key: "pixels", max: budget, n: pixels.length }) });
       if (b.status === 429) {
@@ -516,8 +516,8 @@ export default {
     }
 
     if (path === "/api/pixels" && method === "POST") {
-      if (!limited(request, "pixels", 600, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
-      if (!limitedDay(request, "pixels", 5000)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
+      if (!limited(request, "pixels", 6000, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limitedDay(request, "pixels", 20000)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
       if (!checkOrigin(request)) return json({ error: "Cross-origin requests are not allowed." }, 403);
 
       // emergency pause switch (set settings.paused = '1' in D1 to stop all writes)
@@ -527,7 +527,7 @@ export default {
       }
 
       // global write budget: caps total cost regardless of how many IPs a botnet uses
-      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 10000);
+      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 20000);
       const hub = env.REALTIME.get(env.REALTIME.idFromName("hub"));
       const b = await hub.fetch("https://realtime/budget", { method: "POST", body: JSON.stringify({ key: "pixels", max: budget }) });
       if (b.status === 429) {
