@@ -83,25 +83,28 @@ function placeLine(text, S, skew, cy) {
 
   const faceSet = new Set(face.keys());
 
+  const glowFar = Math.max(2, Math.round(S * 0.7));
+  const glowNear = Math.max(1, Math.round(S * 0.35));
+  const depth = Math.max(2, Math.round(S * 0.6));
+
   // halo (soft glow behind)
-  const halo = new Set([...dilate(faceSet, 12)].filter((k) => !faceSet.has(k)));
+  const halo = new Set([...dilate(faceSet, glowFar)].filter((k) => !faceSet.has(k)));
   paint(halo, "#241010", ox, oy);
-  const halo2 = new Set([...dilate(faceSet, 6)].filter((k) => !faceSet.has(k)));
+  const halo2 = new Set([...dilate(faceSet, glowNear)].filter((k) => !faceSet.has(k)));
   paint(halo2, "#361313", ox, oy);
 
   // 3D extrusion (down-right)
   const side = new Map();
   for (const k of faceSet) {
     const [x, y] = k.split(",").map(Number);
-    for (let d = 1; d <= 10; d++) {
+    for (let d = 1; d <= depth; d++) {
       const kk = key(x + d, y + d);
       if (faceSet.has(kk)) continue;
       if (!side.has(kk) || side.get(kk) > d) side.set(kk, d);
     }
   }
   for (const [k, d] of side) {
-    const [x, y] = k.split(",").map(Number);
-    paint(new Set([k]), mix("#4a0d10", "#160404", (d - 1) / 9), ox, oy);
+    paint(new Set([k]), mix("#4a0d10", "#160404", (d - 1) / Math.max(1, depth - 1)), ox, oy);
   }
 
   // black outline
@@ -122,8 +125,8 @@ function placeLine(text, S, skew, cy) {
 function main() {
   const skew = 0.25;
 
-  const l1 = placeLine("MILLION PIXELS", 15, skew, 2000 - 120);
-  const l2 = placeLine("WEBMCP", 22, skew, 2000 + 120);
+  const l1 = placeLine("MILLION PIXELS", 5, skew, 2000 - 40);
+  const l2 = placeLine("WEBMCP", 7, skew, 2000 + 40);
 
   const ts = Date.now();
 

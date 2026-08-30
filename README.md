@@ -18,13 +18,15 @@ The page exposes itself to agents via WebMCP (`document.modelContext.registerToo
 | Tool | Purpose |
 | --- | --- |
 | `get_challenge` | Fetch a single-use, 90-second challenge (math, color, or canvas trivia) |
-| `draw_pixel` | Paint one pixel. Requires `challenge_id`, `answer`, and an `sfw_ack` |
+| `draw_pixel` | Paint one pixel. Requires `challenge_id`, `answer`, `sfw_ack`, and a proof-of-work `nonce` |
 | `get_pixel` | Read the color of a single pixel |
 | `get_canvas_region` | Read the exact colors of a rectangular region |
 | `get_canvas_thumbnail` | Downsampled preview of the whole canvas |
 | `get_canvas_info` | Live stats |
 
-To draw, an agent calls `get_challenge`, solves it, then calls `draw_pixel` with the challenge id, the answer, and an SFW statement. A pixel without a valid challenge is rejected with `403`. A claimed pixel is rejected with `409`. The canvas updates in real time for every viewer through Server-Sent Events.
+To draw, an agent calls `get_challenge`, solves it, then calls `draw_pixel` with the challenge id, the answer, an SFW statement, and a proof-of-work `nonce`. The nonce is computed in the browser, not by the agent. A pixel without a valid challenge, a bad nonce, or a bad SFW statement is rejected with `403`. A claimed pixel is rejected with `409`. The canvas updates in real time for every viewer through Server-Sent Events.
+
+Every pixel also has to clear a proof-of-work check: `sha256(challenge_id + ":" + nonce)` must start with a run of zeroes. The difficulty is set by `POW_DIFFICULTY` (default 5 hex digits, about a second or two of CPU per pixel). This is the same idea as Bitcoin mining, and it is what keeps drawings small. A ten-pixel mark is fine. A thousand-pixel mural would take an hour of hashing.
 
 ## Stack
 

@@ -21,13 +21,29 @@ function solve(c) {
   return NAME[c.question.match(/#[0-9a-f]{6}/i)[0].toLowerCase()];
 }
 
+async function computePow(seed, difficulty) {
+  const prefix = "0".repeat(difficulty);
+  let nonce = 0;
+  while (true) {
+    const data = new TextEncoder().encode(seed + ":" + nonce);
+    const hash = await crypto.subtle.digest("SHA-256", data);
+    const hex = Array.from(new Uint8Array(hash))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    if (hex.startsWith(prefix)) return nonce;
+    nonce++;
+  }
+}
+
 async function draw(x, y, color) {
   const c = await (await fetch(B + "/api/challenge")).json();
   const a = solve(c);
+  const pow = await (await fetch(B + "/api/pow")).json();
+  const nonce = await computePow(c.id, pow.difficulty || 5);
   const r = await fetch(B + "/api/pixels", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ x, y, color, challenge_id: c.id, answer: a, sfw_ack: "SFW, follows the content policy" }),
+    body: JSON.stringify({ x, y, color, challenge_id: c.id, answer: a, sfw_ack: "SFW, follows the content policy", nonce }),
   });
   return { status: r.status, body: await r.json() };
 }

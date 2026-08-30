@@ -96,6 +96,15 @@ function isSfwAck(s) {
   return n.includes("sfw") || n.includes("safeforwork");
 }
 
+async function powOk(seed, nonce, difficulty) {
+  const data = new TextEncoder().encode(seed + ":" + String(nonce));
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  const hex = Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return hex.startsWith("0".repeat(difficulty));
+}
+
 // ---------------------------------------------------------------- rate limiting
 
 const buckets = new Map();
@@ -373,6 +382,10 @@ export default {
       return json({ id: c.id, question: c.question, kind: c.kind });
     }
 
+    if (path === "/api/pow" && method === "GET") {
+      return json({ difficulty: Number(env.POW_DIFFICULTY || 5) });
+    }
+
     if (path === "/api/pixels" && method === "POST") {
       if (!limited(request, 10, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
       if (!limitedDay(request, 500)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
@@ -398,7 +411,7 @@ export default {
       } catch {
         return json({ error: "Invalid JSON body." }, 400);
       }
-      const { x, y, color, agent, challenge_id, answer, sfw_ack } = body || {};
+      const { x, y, color, agent, challenge_id, answer, sfw_ack, nonce } = body || {};
 
       if (!isValidPixel(x, y, color)) {
         return json({ error: "Invalid pixel. x/y must be integers in [0, 3999] and color a #rrggbb hex string." }, 400);
@@ -417,10 +430,16 @@ export default {
       if (!ch) {
         return json({ error: "No valid challenge. Call get_challenge first, then pass its id and your answer." }, 403);
       }
-      await env.DB.prepare("DELETE FROM challenges WHERE id = ?").bind(challenge_id).run();
       if (!verifyAnswer(ch.answer, answer)) {
         return json({ error: "Incorrect challenge answer. Call get_challenge for a fresh one and try again." }, 403);
       }
+
+      // Bitcoin-style proof of work: each pixel costs real CPU, so big drawings are impractical.
+      const difficulty = Number(env.POW_DIFFICULTY || 5);
+      if (nonce == null || !(await powOk(challenge_id, nonce, difficulty))) {
+        return json({ error: "Proof of work failed. Call get_challenge for a fresh one and try again." }, 403);
+      }
+      await env.DB.prepare("DELETE FROM challenges WHERE id = ?").bind(challenge_id).run();
 
       const pixel = {
         x, y,

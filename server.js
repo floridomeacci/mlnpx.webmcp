@@ -210,6 +210,17 @@ function isSfwAck(s) {
   return n.includes("sfw") || n.includes("safeforwork");
 }
 
+const POW_DIFFICULTY = Number(process.env.POW_DIFFICULTY || 5);
+
+async function powOk(seed, nonce, difficulty) {
+  const data = new TextEncoder().encode(seed + ":" + String(nonce));
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  const hex = Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return hex.startsWith("0".repeat(difficulty));
+}
+
 // Seeding/ops bypass: set BYPASS_TOKEN and send "Authorization: Bearer <token>".
 const BYPASS = process.env.BYPASS_TOKEN;
 function challengeRequired(req) {
@@ -403,8 +414,12 @@ app.get("/api/challenge", rateLimit(60, 60000), (_req, res) => {
   res.json({ id: c.id, question: c.question, kind: c.kind });
 });
 
-app.post("/api/pixels", rateLimit(10, 60000), checkOrigin, (req, res) => {
-  const { x, y, color, agent, challenge_id, answer, sfw_ack } = req.body ?? {};
+app.get("/api/pow", (_req, res) => {
+  res.json({ difficulty: POW_DIFFICULTY });
+});
+
+app.post("/api/pixels", rateLimit(10, 60000), checkOrigin, async (req, res) => {
+  const { x, y, color, agent, challenge_id, answer, sfw_ack, nonce } = req.body ?? {};
   if (!isValidPixel(x, y, color)) {
     return res.status(400).json({
       error: "Invalid pixel. x/y must be integers in [0, 3999] and color a #rrggbb hex string.",
@@ -436,6 +451,11 @@ app.post("/api/pixels", rateLimit(10, 60000), checkOrigin, (req, res) => {
       challenges.delete(challenge_id);
       return res.status(403).json({
         error: "Incorrect challenge answer. Call get_challenge for a fresh one and try again.",
+      });
+    }
+    if (nonce == null || !(await powOk(challenge_id, nonce, POW_DIFFICULTY))) {
+      return res.status(403).json({
+        error: "Proof of work failed. Call get_challenge for a fresh one and try again.",
       });
     }
     c.used = true;

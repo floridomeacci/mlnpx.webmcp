@@ -171,11 +171,28 @@ function connectStream() {
   };
 }
 
+let powDifficulty = 5;
+
+async function computePow(challengeId) {
+  const prefix = "0".repeat(powDifficulty);
+  let nonce = 0;
+  while (true) {
+    const data = new TextEncoder().encode(challengeId + ":" + nonce);
+    const hash = await crypto.subtle.digest("SHA-256", data);
+    const hex = Array.from(new Uint8Array(hash))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    if (hex.startsWith(prefix)) return nonce;
+    nonce++;
+  }
+}
+
 async function drawPixel(x, y, color, agent, challengeId, answer, sfwAck) {
+  const nonce = await computePow(challengeId);
   const res = await fetch("/api/pixels", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ x, y, color, agent, challenge_id: challengeId, answer, sfw_ack: sfwAck }),
+    body: JSON.stringify({ x, y, color, agent, challenge_id: challengeId, answer, sfw_ack: sfwAck, nonce }),
   });
   const data = await res.json();
   if (!res.ok) {
@@ -212,7 +229,7 @@ async function registerWebMCPTools() {
       name: "draw_pixel",
       title: "Draw a pixel",
       description:
-        "Paint exactly one pixel on the shared Million Pixels canvas, a 4000x4000 grid with coordinates 0 to 3999. Each call places one pixel at (x, y) in the given color. Pixels are permanent: a claimed coordinate cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you must call get_challenge, solve the question it returns, and pass its id and your answer. You must also set sfw_ack to a short sentence stating your pixel is SFW and follows the content policy (no porn, nudity, sexual content involving minors, profanity, hate speech, racism, or Nazi imagery). One pixel per call, never more.",
+        "Paint exactly one pixel on the shared Million Pixels canvas, a 4000x4000 grid with coordinates 0 to 3999. Each call places one pixel at (x, y) in the given color. Pixels are permanent: a claimed coordinate cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you must call get_challenge, solve the question it returns, and pass its id and your answer. You must also set sfw_ack to a short sentence stating your pixel is SFW and follows the content policy (no porn, nudity, sexual content involving minors, profanity, hate speech, racism, or Nazi imagery). One pixel per call, never more. Keep your whole design small, a handful of pixels. Every pixel costs real proof-of-work CPU, so large drawings are not practical.",
       inputSchema: {
         type: "object",
         properties: {
@@ -507,7 +524,7 @@ document.addEventListener("keydown", (evt) => {
 
 const PROMPT_TEMPLATE =
   "You're looking at the Million Pixels canvas, a free 4000×4000 grid of pixels. " +
-  "Your job is to draw something on it with the `draw_pixel` tool. Four rules. " +
+  "Your job is to draw something small on it with the `draw_pixel` tool. Five rules. " +
   "One, you can place only ONE pixel per tool call. " +
   "Two, every pixel has to be earned: call `get_challenge`, solve the question it gives you, " +
   "then pass that challenge's id and your answer to `draw_pixel`. " +
@@ -515,8 +532,9 @@ const PROMPT_TEMPLATE =
   "Four, keep it safe for work. No porn or nudity, nothing sexual involving minors, no profanity, " +
   "no hate speech or racism, and no Nazi or Hitler imagery. When you call `draw_pixel`, set " +
   "`sfw_ack` to a short sentence confirming your pixel is SFW and follows the content policy. " +
-  "Start by calling `get_canvas_info` to see what's there, then pick a shape, word, or flag " +
-  "and paint it one pixel at a time.";
+  "Five, keep it small. A handful of pixels is plenty. Every pixel costs real proof-of-work CPU, " +
+  "so a big drawing would take ages. Start by calling `get_canvas_info` to see what's there, " +
+  "then paint a tiny shape, letter, or flag, one pixel at a time.";
 
 function buildPrompt() {
   const name = document.getElementById("agent-name").value.trim();
@@ -549,6 +567,12 @@ copyBtn.addEventListener("click", async () => {
 
 async function boot() {
   refreshPrompt();
+  try {
+    const p = await (await fetch("/api/pow")).json();
+    if (Number.isInteger(p.difficulty)) powDifficulty = p.difficulty;
+  } catch {
+    /* keep default */
+  }
   await loadPixels();
   await loadStats();
   fit();
