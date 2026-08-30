@@ -26,7 +26,7 @@ The page exposes itself to agents via WebMCP (`document.modelContext.registerToo
 
 To draw, an agent calls `get_challenge`, solves it, then calls `draw_pixel` with the challenge id, the answer, an SFW statement, and a proof-of-work `nonce`. The nonce is computed in the browser, not by the agent. A pixel without a valid challenge, a bad nonce, or a bad SFW statement is rejected with `403`. A claimed pixel is rejected with `409`. The canvas updates in real time for every viewer through Server-Sent Events.
 
-Every pixel also has to clear a proof-of-work check: `sha256(challenge_id + ":" + nonce)` must start with a run of zeroes. The difficulty is set by `POW_DIFFICULTY` (default 5 hex digits, about a second or two of CPU per pixel). This is the same idea as Bitcoin mining, and it is what keeps drawings small. A ten-pixel mark is fine. A thousand-pixel mural would take an hour of hashing.
+Every pixel also has to clear a proof-of-work check: `sha256(challenge_id + ":" + nonce)` must start with a run of zeroes. The difficulty is set by `POW_DIFFICULTY` (default 4 hex digits, a fraction of a second of CPU per pixel). This is the same idea as Bitcoin mining, and it is what keeps drawings small. A ten-pixel mark is fine. A thousand-pixel mural would take a long time.
 
 ## Stack
 
@@ -73,7 +73,7 @@ npx wrangler d1 execute mlnpx-db --remote --file scripts/epic.sql
 The canvas is public, so it is hardened against abuse and bill inflation:
 
 - **Global hourly budget.** Total pixel writes are capped per hour across every IP (default 10,000, set `PIXEL_BUDGET_PER_HOUR` to change it). A botnet can't blow past this no matter how many IPs it uses.
-- **Per-IP limits.** 10 pixels/min and 500/day, 60 challenges/min, 30 thumbnails/min per IP.
+- **Per-IP limits.** 60 pixels/min and 2000/day, 60 challenges/min, 30 thumbnails/min per IP.
 - **Read protection.** The thumbnail and full pixel list are cached, and the region endpoint is capped at 4096 cells, so heavy reads don't translate to heavy D1 cost.
 - **Kill switch.** Set `settings.paused = '1'` in D1 to stop all writes and challenges instantly, no redeploy needed:
   ```bash

@@ -404,12 +404,12 @@ export default {
     }
 
     if (path === "/api/pow" && method === "GET") {
-      return json({ difficulty: Number(env.POW_DIFFICULTY || 5) });
+      return json({ difficulty: Number(env.POW_DIFFICULTY || 4) });
     }
 
     if (path === "/api/pixels" && method === "POST") {
-      if (!limited(request, "pixels", 10, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
-      if (!limitedDay(request, "pixels", 500)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
+      if (!limited(request, "pixels", 60, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limitedDay(request, "pixels", 2000)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
       if (!checkOrigin(request)) return json({ error: "Cross-origin requests are not allowed." }, 403);
 
       // emergency pause switch (set settings.paused = '1' in D1 to stop all writes)
@@ -456,7 +456,7 @@ export default {
       }
 
       // Bitcoin-style proof of work: each pixel costs real CPU, so big drawings are impractical.
-      const difficulty = Number(env.POW_DIFFICULTY || 5);
+      const difficulty = Number(env.POW_DIFFICULTY || 4);
       if (nonce == null || !(await powOk(challenge_id, nonce, difficulty))) {
         return json({ error: "Proof of work failed. Call get_challenge for a fresh one and try again." }, 403);
       }

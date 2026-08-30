@@ -45,6 +45,7 @@ async function draw(x, y, color, difficulty) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ x, y, color, agent: AGENT, challenge_id: c.id, answer: a, sfw_ack: "SFW, follows the content policy", nonce }),
   });
+  if (r.status === 409) return hashMs; // already claimed, skip
   if (r.status !== 201) {
     throw new Error(`(${x},${y}) ${r.status} ${JSON.stringify(await r.json())}`);
   }
@@ -67,7 +68,6 @@ async function main() {
 
   const cx = Number(process.env.SMX) || 700, cy = Number(process.env.SMY) || 700;
   const jobs = [
-    ...circle(cx, cy, 5, "#ffcc00"),
     ...circle(cx - 2, cy - 2, 1, "#111111"),
     ...circle(cx + 2, cy - 2, 1, "#111111"),
     [cx - 2, cy + 2, "#111111"],
@@ -75,6 +75,7 @@ async function main() {
     [cx, cy + 3, "#111111"],
     [cx + 1, cy + 3, "#111111"],
     [cx + 2, cy + 2, "#111111"],
+    ...circle(cx, cy, 5, "#ffcc00"),
   ];
 
   console.log(`drawing smiley: ${jobs.length} pixels, PoW difficulty ${difficulty}`);

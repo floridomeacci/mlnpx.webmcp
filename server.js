@@ -210,7 +210,7 @@ function isSfwAck(s) {
   return n.includes("sfw") || n.includes("safeforwork");
 }
 
-const POW_DIFFICULTY = Number(process.env.POW_DIFFICULTY || 5);
+const POW_DIFFICULTY = Number(process.env.POW_DIFFICULTY || 4);
 
 async function powOk(seed, nonce, difficulty) {
   const data = new TextEncoder().encode(seed + ":" + String(nonce));
@@ -418,7 +418,7 @@ app.get("/api/pow", (_req, res) => {
   res.json({ difficulty: POW_DIFFICULTY });
 });
 
-app.post("/api/pixels", rateLimit("pixels", 10, 60000), checkOrigin, async (req, res) => {
+app.post("/api/pixels", rateLimit("pixels", 60, 60000), checkOrigin, async (req, res) => {
   const { x, y, color, agent, challenge_id, answer, sfw_ack, nonce } = req.body ?? {};
   if (!isValidPixel(x, y, color)) {
     return res.status(400).json({
