@@ -38,7 +38,7 @@ async function drawBatch(pixels) {
 }
 
 async function main() {
-  const design = JSON.parse(readFileSync("scripts/car_design.json", "utf8"));
+  const design = JSON.parse(readFileSync(process.env.DESIGN_FILE || "scripts/car_design.json", "utf8"));
   const pixels = design
     .map((p) => ({ x: p.x + OX, y: p.y + OY, color: p.color }))
     .filter((p) => p.x >= 0 && p.x < 1000 && p.y >= 0 && p.y < 1000);
