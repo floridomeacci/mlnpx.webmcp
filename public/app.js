@@ -68,10 +68,28 @@ function fit() {
   render();
 }
 
+function clampView() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const cw = GRID * view.scale;
+  const ch = GRID * view.scale;
+  if (cw >= w) {
+    view.ox = Math.min(0, Math.max(w - cw, view.ox));
+  } else {
+    view.ox = (w - cw) / 2;
+  }
+  if (ch >= h) {
+    view.oy = Math.min(0, Math.max(h - ch, view.oy));
+  } else {
+    view.oy = (h - ch) / 2;
+  }
+}
+
 function render() {
   const dpr = window.devicePixelRatio || 1;
   const w = window.innerWidth;
   const h = window.innerHeight;
+  clampView();
   canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
