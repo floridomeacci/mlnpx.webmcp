@@ -9,9 +9,9 @@ function solve(c) {
     return String(m[2] === "+" ? +m[1] + +m[3] : m[2] === "-" ? +m[1] - +m[3] : +m[1] * +m[3]);
   }
   if (c.kind === "canvas") {
-    if (c.question.includes("rows of this 4000-wide")) return String(+c.question.match(/in (\d+) rows/)[1] * 4000);
-    if (c.question.includes("already painted")) return String(4000 - +c.question.match(/and (\d+) are already painted/)[1]);
-    return String((16000000 * +c.question.match(/If (\d+)%/)[1]) / 100);
+    if (c.question.includes("rows of this 1000-wide")) return String(+c.question.match(/in (\d+) rows/)[1] * 1000);
+    if (c.question.includes("already painted")) return String(1000 - +c.question.match(/and (\d+) are already painted/)[1]);
+    return String((1000000 * +c.question.match(/If (\d+)%/)[1]) / 100);
   }
   if (c.kind === "coordinate") {
     if (c.question.includes("top or the bottom")) return "top";

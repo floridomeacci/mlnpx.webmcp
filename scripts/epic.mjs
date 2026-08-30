@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 
-const GRID = 4000;
+const GRID = 1000;
 const OUT = "scripts/epic.sql";
 
 const FONT = {
@@ -123,10 +123,10 @@ function placeLine(text, S, skew, cy) {
 }
 
 function main() {
-  const skew = 0.25;
+  const skew = 0.3;
 
-  const l1 = placeLine("MILLION PIXELS", 5, skew, 2000 - 40);
-  const l2 = placeLine("WEBMCP", 7, skew, 2000 + 40);
+  const l1 = placeLine("MILLION PIXELS", 2, skew, 485);
+  const l2 = placeLine("WEBMCP", 3, skew, 512);
 
   const ts = Date.now();
 

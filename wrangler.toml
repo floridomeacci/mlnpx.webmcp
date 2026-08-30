@@ -19,6 +19,13 @@ class_name = "Realtime"
 type = "durable-object"
 storage = "sqlite"
 
+[[r2_buckets]]
+bucket_name = "mlnpx-backups"
+binding = "BACKUPS"
+
+[triggers]
+crons = ["0 * * * *"]
+
 [[routes]]
 pattern = "mlnpx.com"
 custom_domain = true

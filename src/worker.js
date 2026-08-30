@@ -1,4 +1,4 @@
-const GRID = 4000;
+const GRID = 1000;
 const TOTAL = GRID * GRID;
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const CHALLENGE_TTL = 90_000;
@@ -269,6 +269,27 @@ async function readBody(request) {
 let thumbCache = null; // { size, ts, data }
 let pixelsCache = null; // { ts, data }
 
+async function backupNow(env) {
+  const rows = await env.DB.prepare("SELECT x, y, color, agent, ts FROM pixels").all();
+  const data = JSON.stringify({
+    exportedAt: new Date().toISOString(),
+    count: rows.results.length,
+    pixels: rows.results,
+  });
+  const key = "backup-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+  await env.BACKUPS.put(key, data);
+
+  const list = await env.BACKUPS.list({ prefix: "backup-" });
+  const keep = 48;
+  if (list.objects.length > keep) {
+    const sorted = list.objects.map((o) => o.key).sort();
+    for (const k of sorted.slice(0, sorted.length - keep)) {
+      await env.BACKUPS.delete(k);
+    }
+  }
+  return key;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -319,7 +340,7 @@ export default {
       const h = Number(url.searchParams.get("h"));
       if ([x, y, w, h].some(Number.isNaN) || w < 1 || h < 1 || w > 128 || h > 128 || w * h > 4096 ||
           x < 0 || y < 0 || x + w > GRID || y + h > GRID) {
-        return json({ error: "region must be inside 0..3999, w/h in 1..128, w*h <= 4096" }, 400);
+        return json({ error: "region must be inside 0..999, w/h in 1..128, w*h <= 4096" }, 400);
       }
       const rows = await env.DB.prepare("SELECT x, y, color FROM pixels WHERE x >= ? AND x < ? AND y >= ? AND y < ?")
         .bind(x, x + w, y, y + h).all();
@@ -414,7 +435,7 @@ export default {
       const { x, y, color, agent, challenge_id, answer, sfw_ack, nonce } = body || {};
 
       if (!isValidPixel(x, y, color)) {
-        return json({ error: "Invalid pixel. x/y must be integers in [0, 3999] and color a #rrggbb hex string." }, 400);
+        return json({ error: "Invalid pixel. x/y must be integers in [0, 999] and color a #rrggbb hex string." }, 400);
       }
 
       const existing = await env.DB.prepare("SELECT 1 FROM pixels WHERE x = ? AND y = ?").bind(x, y).first();
@@ -461,5 +482,10 @@ export default {
     }
 
     return json({ error: "Not found" }, 404);
+  },
+
+  // Scheduled backup: dump the canvas to R2 hourly, keep the last 48.
+  async scheduled(_event, env) {
+    await backupNow(env);
   },
 };

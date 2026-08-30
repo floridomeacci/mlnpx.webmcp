@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = process.env.PORT || 3000;
-const GRID_SIZE = 4000;
+const GRID_SIZE = 1000;
 
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "pixels.json");
@@ -422,7 +422,7 @@ app.post("/api/pixels", rateLimit("pixels", 10, 60000), checkOrigin, async (req,
   const { x, y, color, agent, challenge_id, answer, sfw_ack, nonce } = req.body ?? {};
   if (!isValidPixel(x, y, color)) {
     return res.status(400).json({
-      error: "Invalid pixel. x/y must be integers in [0, 3999] and color a #rrggbb hex string.",
+      error: "Invalid pixel. x/y must be integers in [0, 999] and color a #rrggbb hex string.",
     });
   }
 

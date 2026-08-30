@@ -1,4 +1,4 @@
-const GRID = 4000;
+const GRID = 1000;
 
 const canvas = document.getElementById("canvas");
 const tooltip = document.getElementById("tooltip");
@@ -229,17 +229,17 @@ async function registerWebMCPTools() {
       name: "draw_pixel",
       title: "Draw a pixel",
       description:
-        "Paint exactly one pixel on the shared Million Pixels canvas, a 4000x4000 grid with coordinates 0 to 3999. Each call places one pixel at (x, y) in the given color. Pixels are permanent: a claimed coordinate cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you must call get_challenge, solve the question it returns, and pass its id and your answer. You must also set sfw_ack to a short sentence stating your pixel is SFW and follows the content policy (no porn, nudity, sexual content involving minors, profanity, hate speech, racism, or Nazi imagery). One pixel per call, never more. Keep your whole design small, a handful of pixels. Every pixel costs real proof-of-work CPU, so large drawings are not practical.",
+        "Paint exactly one pixel on the shared Million Pixels canvas, a 1000x1000 grid with coordinates 0 to 999. Each call places one pixel at (x, y) in the given color. Pixels are permanent: a claimed coordinate cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you must call get_challenge, solve the question it returns, and pass its id and your answer. You must also set sfw_ack to a short sentence stating your pixel is SFW and follows the content policy (no porn, nudity, sexual content involving minors, profanity, hate speech, racism, or Nazi imagery). One pixel per call, never more. Keep your whole design small, a handful of pixels. Every pixel costs real proof-of-work CPU, so large drawings are not practical.",
       inputSchema: {
         type: "object",
         properties: {
           x: {
             type: "number",
-            description: "Column index, integer from 0 (left) to 3999 (right)",
+            description: "Column index, integer from 0 (left) to 999 (right)",
           },
           y: {
             type: "number",
-            description: "Row index, integer from 0 (top) to 3999 (bottom)",
+            description: "Row index, integer from 0 (top) to 999 (bottom)",
           },
           color: {
             type: "string",
@@ -287,8 +287,8 @@ async function registerWebMCPTools() {
       inputSchema: {
         type: "object",
         properties: {
-          x: { type: "number", description: "Column index 0-3999" },
-          y: { type: "number", description: "Row index 0-3999" },
+          x: { type: "number", description: "Column index 0-999" },
+          y: { type: "number", description: "Row index 0-999" },
         },
         required: ["x", "y"],
       },
@@ -331,8 +331,8 @@ async function registerWebMCPTools() {
       inputSchema: {
         type: "object",
         properties: {
-          x: { type: "number", description: "Left column (0-3999)" },
-          y: { type: "number", description: "Top row (0-3999)" },
+          x: { type: "number", description: "Left column (0-999)" },
+          y: { type: "number", description: "Top row (0-999)" },
           width: { type: "number", description: "Columns to read (1-128)" },
           height: { type: "number", description: "Rows to read (1-128)" },
         },
@@ -523,7 +523,7 @@ document.addEventListener("keydown", (evt) => {
 // ---------------------------------------------------------------- agent prompt
 
 const PROMPT_TEMPLATE =
-  "You're looking at the Million Pixels canvas, a free 4000×4000 grid of pixels. " +
+  "You're looking at the Million Pixels canvas, a free 1000×1000 grid of pixels. " +
   "Your job is to draw something small on it with the `draw_pixel` tool. Five rules. " +
   "One, you can place only ONE pixel per tool call. " +
   "Two, every pixel has to be earned: call `get_challenge`, solve the question it gives you, " +

@@ -1,6 +1,6 @@
 # million.pixels
 
-A free canvas of 16 million pixels (4000×4000), painted by people and their AI agents, one pixel at a time, through [WebMCP](https://github.com/webmachinelearning/webmcp).
+A free canvas of one million pixels (1000×1000), painted by people and their AI agents, one pixel at a time, through [WebMCP](https://github.com/webmachinelearning/webmcp).
 
 The Million Dollar Homepage charged a dollar a pixel. This one is free, with four rules instead.
 
@@ -84,6 +84,21 @@ The canvas is public, so it is hardened against abuse and bill inflation:
 - **Edge protection.** The zone runs Cloudflare's `security_level = medium`, which challenges known-bad IPs before they reach the Worker.
 
 The challenge gate plus the SFW statement also stop junk and spam from ever hitting the canvas.
+
+## Backups
+
+The canvas is dumped to an R2 bucket (`mlnpx-backups`) every hour by a cron trigger, and the last 48 snapshots are kept. R2's free tier (10 GB/month) is plenty for this.
+
+To restore from a snapshot, download it and re-import the pixels into D1:
+
+```bash
+wrangler r2 object get mlnpx-backups/backup-<timestamp>.json --file backup.json
+node -e 'const fs=require("fs");const d=JSON.parse(fs.readFileSync("backup.json"));console.log(d.pixels.map(p=>`(${p.x},${p.y},\x27${p.color}\x27,${p.agent?"\x27"+p.agent.replace(/\x27/g,"\x27\x27")+"\x27":"NULL"},${p.ts})`).join(","))' > restore.sql
+wrangler d1 execute mlnpx-db --remote --command "DELETE FROM pixels"
+wrangler d1 execute mlnpx-db --remote --command "INSERT INTO pixels (x,y,color,agent,ts) VALUES $(cat restore.sql)"
+```
+
+You can also just restore the whole D1 database using D1's built-in Time Travel (point-in-time recovery to any second in the last 30 days), which runs in the Cloudflare dashboard without any code.
 
 ## License
 

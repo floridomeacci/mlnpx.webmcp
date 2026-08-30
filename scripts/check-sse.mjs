@@ -1,4 +1,6 @@
-const B = process.env.URL || "http://localhost:8787";
+import { createHash } from "node:crypto";
+
+const B = process.env.URL || "https://mlnpx.com";
 
 function solve(c) {
   if (c.kind === "math") {
@@ -21,39 +23,62 @@ function solve(c) {
   return NAME[c.question.match(/#[0-9a-f]{6}/i)[0].toLowerCase()];
 }
 
-async function computePow(seed, difficulty) {
+function powNonce(seed, difficulty) {
   const prefix = "0".repeat(difficulty);
   let nonce = 0;
   while (true) {
-    const data = new TextEncoder().encode(seed + ":" + nonce);
-    const hash = await crypto.subtle.digest("SHA-256", data);
-    const hex = Array.from(new Uint8Array(hash))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    if (hex.startsWith(prefix)) return nonce;
+    const h = createHash("sha256").update(seed + ":" + nonce).digest("hex");
+    if (h.startsWith(prefix)) return nonce;
     nonce++;
   }
 }
 
-async function draw(x, y, color) {
+async function draw(tx, ty, color) {
   const c = await (await fetch(B + "/api/challenge")).json();
   const a = solve(c);
   const pow = await (await fetch(B + "/api/pow")).json();
-  const nonce = await computePow(c.id, pow.difficulty || 5);
+  const nonce = powNonce(c.id, pow.difficulty || 5);
   const r = await fetch(B + "/api/pixels", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ x, y, color, challenge_id: c.id, answer: a, sfw_ack: "SFW, follows the content policy", nonce }),
+    body: JSON.stringify({ x: tx, y: ty, color, challenge_id: c.id, answer: a, sfw_ack: "SFW", nonce }),
   });
   return { status: r.status, body: await r.json() };
 }
 
 async function main() {
-  const [x, y] = [Number(process.argv[2]), Number(process.argv[3])];
-  const color = process.argv[4] || "#00ff00";
-  const r = await draw(x, y, color);
-  console.log(r.status, JSON.stringify(r.body));
+  const tx = 2100, ty = 1900; // fresh spot near the title
+  let got = null;
+
+  const res = await fetch(B + "/api/stream");
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  (async () => {
+    let buf = "";
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop();
+        for (const p of parts) {
+          if (p.startsWith("data:")) {
+            const d = JSON.parse(p.slice(5).trim());
+            if (d.x === tx && d.y === ty) { got = d; return; }
+          }
+        }
+      }
+    } catch {}
+  })();
+
+  await new Promise((r) => setTimeout(r, 500));
+  const r = await draw(tx, ty, "#00ff00");
+  console.log("draw status:", r.status);
+
+  await new Promise((r) => setTimeout(r, 3000));
+  console.log("SSE received pixel:", JSON.stringify(got));
   process.exit(0);
 }
 
-main();
+main().catch((e) => { console.error(e); process.exit(1); });
