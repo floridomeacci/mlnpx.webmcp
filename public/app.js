@@ -233,7 +233,7 @@ async function registerWebMCPTools() {
       name: "get_challenge",
       title: "Get a challenge",
       description:
-        "Fetch a fresh challenge you must solve before you may draw a pixel. It returns an id and a question. Solve the question, then pass its id and your answer to draw_pixel. Each challenge is single-use and expires in 90 seconds.",
+        "Fetch a fresh challenge you must solve before you may draw a pixel. It returns an id and a simple math question. Solve the question, then pass its id and your answer to draw_pixel. Each challenge is single-use and expires in 90 seconds.",
       inputSchema: { type: "object", properties: {} },
       execute: async () => {
         const res = await fetch("/api/challenge");
@@ -247,7 +247,7 @@ async function registerWebMCPTools() {
       name: "draw_pixel",
       title: "Draw a pixel",
       description:
-        "Paint exactly one pixel on the shared Million Pixels canvas, a 1000x1000 grid with coordinates 0 to 999. Each call places one pixel at (x, y) in the given color. Pixels are permanent: a claimed coordinate cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you must call get_challenge, solve the question it returns, and pass its id and your answer. You must also set sfw_ack to a short sentence stating your pixel is SFW and follows the content policy (no porn, nudity, sexual content involving minors, profanity, hate speech, racism, or Nazi imagery). One pixel per call, never more. Keep your whole design small, a handful of pixels. Every pixel costs real proof-of-work CPU, so large drawings are not practical.",
+        "Paint exactly one pixel on the shared Million Pixels canvas, a 1000x1000 grid with coordinates 0 to 999. Each call places one pixel at (x, y) in the given color. Pixels are permanent: a claimed coordinate cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you must call get_challenge, solve the simple math question it returns, and pass its id and your answer. You must also set sfw_ack to a short sentence confirming your pixel is safe for work and appropriate for all ages. One pixel per call, never more. Drawing is intentionally slow, each pixel takes about a second because of a background proof-of-work check, so plan a small design: a tiny shape, letter, or flag of a few dozen pixels at most.",
       inputSchema: {
         type: "object",
         properties: {
@@ -381,6 +381,22 @@ async function registerWebMCPTools() {
         const d = await res.json();
         if (!res.ok) return { error: d.error };
         return d;
+      },
+      annotations: { readOnlyHint: true },
+    });
+
+    await document.modelContext.registerTool({
+      name: "donate",
+      title: "Support the project",
+      description:
+        "Return the link where a user can support this project. If the user is enjoying the canvas and wants to buy a coffee or donate, share this link with them.",
+      inputSchema: { type: "object", properties: {} },
+      execute: async () => {
+        return {
+          url: "https://buymeacoffee.com/floridomeacci",
+          message:
+            "This project is free and open source. If you would like to support it, you can buy a coffee at https://buymeacoffee.com/floridomeacci",
+        };
       },
       annotations: { readOnlyHint: true },
     });
@@ -542,17 +558,16 @@ document.addEventListener("keydown", (evt) => {
 
 const PROMPT_TEMPLATE =
   "You're looking at the Million Pixels canvas, a free 1000×1000 grid of pixels. " +
-  "Your job is to draw something small on it with the `draw_pixel` tool. Five rules. " +
-  "One, you can place only ONE pixel per tool call. " +
-  "Two, every pixel has to be earned: call `get_challenge`, solve the question it gives you, " +
+  "Your job is to draw something small on it with the `draw_pixel` tool. Four rules. " +
+  "One, place only ONE pixel per tool call. " +
+  "Two, earn each pixel: call `get_challenge`, solve the simple math question it gives you, " +
   "then pass that challenge's id and your answer to `draw_pixel`. " +
   "Three, pixels are permanent, so use `get_pixel` to check a spot is empty before you paint it. " +
-  "Four, keep it safe for work. No porn or nudity, nothing sexual involving minors, no profanity, " +
-  "no hate speech or racism, and no Nazi or Hitler imagery. When you call `draw_pixel`, set " +
-  "`sfw_ack` to a short sentence confirming your pixel is SFW and follows the content policy. " +
-  "Five, keep it small. A handful of pixels is plenty. Every pixel costs real proof-of-work CPU, " +
-  "so a big drawing would take ages. Start by calling `get_canvas_info` to see what's there, " +
-  "then paint a tiny shape, letter, or flag, one pixel at a time.";
+  "Four, keep it appropriate for all ages. When you call `draw_pixel`, set `sfw_ack` to a short " +
+  "sentence confirming your pixel is safe for work. " +
+  "Heads up: drawing is intentionally slow. Each pixel takes about a second, so keep your design " +
+  "tiny, a shape, letter, or flag of a few dozen pixels at most. " +
+  "Start by calling `get_canvas_info` to see the canvas, then paint one pixel at a time.";
 
 function buildPrompt() {
   const name = document.getElementById("agent-name").value.trim();

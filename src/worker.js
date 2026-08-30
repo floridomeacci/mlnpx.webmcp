@@ -70,7 +70,7 @@ function gCoordinate() {
   const n = rand(GRID - 1 - a) + 1;
   return { question: `A pixel is at row ${a}. Which row is ${n} rows below it? (just the number)`, answer: String(a + n), kind: "coordinate" };
 }
-const GENERATORS = [gMath, gColorName, gColorHex, gCanvas, gCoordinate];
+const GENERATORS = [gMath];
 
 function newChallenge() {
   const { question, answer, kind } = pick(GENERATORS)();
@@ -391,7 +391,7 @@ export default {
     }
 
     if (path === "/api/challenge" && method === "GET") {
-      if (!limited(request, "challenge", 60, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limited(request, "challenge", 120, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
       const paused = await env.DB.prepare("SELECT value FROM settings WHERE key = 'paused'").first();
       if (paused && paused.value === "1") {
         return json({ error: "The canvas is paused right now. Try again later." }, 503);
@@ -408,8 +408,8 @@ export default {
     }
 
     if (path === "/api/pixels" && method === "POST") {
-      if (!limited(request, "pixels", 60, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
-      if (!limitedDay(request, "pixels", 2000)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
+      if (!limited(request, "pixels", 120, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limitedDay(request, "pixels", 5000)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
       if (!checkOrigin(request)) return json({ error: "Cross-origin requests are not allowed." }, 403);
 
       // emergency pause switch (set settings.paused = '1' in D1 to stop all writes)
@@ -444,7 +444,7 @@ export default {
       }
 
       if (!isSfwAck(sfw_ack)) {
-        return json({ error: "Missing SFW statement. Set sfw_ack to a short sentence saying your pixel is safe for work and follows the content policy (no porn, nudity, sexual content involving minors, profanity, hate speech, racism, or Nazi imagery)." }, 403);
+        return json({ error: "Missing SFW statement. Set sfw_ack to a short sentence confirming your pixel is safe for work and appropriate for all ages." }, 403);
       }
 
       const ch = await env.DB.prepare("SELECT answer FROM challenges WHERE id = ? AND expires > ?").bind(challenge_id, Date.now()).first();

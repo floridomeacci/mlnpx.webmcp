@@ -172,7 +172,7 @@ function gCoordinate() {
   return { question: `A pixel is at row ${a}. Which row is ${n} rows below it? (just the number)`, answer: String(a + n), kind: "coordinate" };
 }
 
-const GENERATORS = [gMath, gColorName, gColorHex, gCanvas, gCoordinate];
+const GENERATORS = [gMath];
 
 function pruneChallenges() {
   const now = Date.now();
@@ -409,7 +409,7 @@ app.get("/api/thumbnail", (req, res) => {
   res.json({ size, rows });
 });
 
-app.get("/api/challenge", rateLimit("challenge", 60, 60000), (_req, res) => {
+app.get("/api/challenge", rateLimit("challenge", 120, 60000), (_req, res) => {
   const c = newChallenge();
   res.json({ id: c.id, question: c.question, kind: c.kind });
 });
@@ -418,7 +418,7 @@ app.get("/api/pow", (_req, res) => {
   res.json({ difficulty: POW_DIFFICULTY });
 });
 
-app.post("/api/pixels", rateLimit("pixels", 60, 60000), checkOrigin, async (req, res) => {
+app.post("/api/pixels", rateLimit("pixels", 120, 60000), checkOrigin, async (req, res) => {
   const { x, y, color, agent, challenge_id, answer, sfw_ack, nonce } = req.body ?? {};
   if (!isValidPixel(x, y, color)) {
     return res.status(400).json({
@@ -435,7 +435,7 @@ app.post("/api/pixels", rateLimit("pixels", 60, 60000), checkOrigin, async (req,
 
   if (!isSfwAck(sfw_ack)) {
     return res.status(403).json({
-      error: "Missing SFW statement. Set sfw_ack to a short sentence saying your pixel is safe for work and follows the content policy (no porn, nudity, sexual content involving minors, profanity, hate speech, racism, or Nazi imagery).",
+      error: "Missing SFW statement. Set sfw_ack to a short sentence confirming your pixel is safe for work and appropriate for all ages.",
     });
   }
 
