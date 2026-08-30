@@ -257,10 +257,10 @@ app.use(express.static(path.join(__dirname, "public")));
 // ---------------------------------------------------------------- rate limiting
 
 const rateBuckets = new Map();
-function rateLimit(max, windowMs) {
+function rateLimit(name, max, windowMs) {
   return (req, res, next) => {
     const now = Date.now();
-    const key = req.ip || "unknown";
+    const key = (req.ip || "unknown") + ":" + name;
     const b = rateBuckets.get(key);
     if (!b || b.resetAt <= now) {
       rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
@@ -409,7 +409,7 @@ app.get("/api/thumbnail", (req, res) => {
   res.json({ size, rows });
 });
 
-app.get("/api/challenge", rateLimit(60, 60000), (_req, res) => {
+app.get("/api/challenge", rateLimit("challenge", 60, 60000), (_req, res) => {
   const c = newChallenge();
   res.json({ id: c.id, question: c.question, kind: c.kind });
 });
@@ -418,7 +418,7 @@ app.get("/api/pow", (_req, res) => {
   res.json({ difficulty: POW_DIFFICULTY });
 });
 
-app.post("/api/pixels", rateLimit(10, 60000), checkOrigin, async (req, res) => {
+app.post("/api/pixels", rateLimit("pixels", 10, 60000), checkOrigin, async (req, res) => {
   const { x, y, color, agent, challenge_id, answer, sfw_ack, nonce } = req.body ?? {};
   if (!isValidPixel(x, y, color)) {
     return res.status(400).json({

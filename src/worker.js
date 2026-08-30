@@ -108,9 +108,9 @@ async function powOk(seed, nonce, difficulty) {
 // ---------------------------------------------------------------- rate limiting
 
 const buckets = new Map();
-function limited(request, max, windowMs) {
+function limited(request, name, max, windowMs) {
   const now = Date.now();
-  const key = request.headers.get("CF-Connecting-IP") || "unknown";
+  const key = (request.headers.get("CF-Connecting-IP") || "unknown") + ":" + name;
   const b = buckets.get(key);
   if (!b || b.reset <= now) {
     buckets.set(key, { n: 1, reset: now + windowMs });
@@ -121,9 +121,9 @@ function limited(request, max, windowMs) {
 }
 
 const dayBuckets = new Map();
-function limitedDay(request, max) {
+function limitedDay(request, name, max) {
   const now = Date.now();
-  const key = request.headers.get("CF-Connecting-IP") || "unknown";
+  const key = (request.headers.get("CF-Connecting-IP") || "unknown") + ":" + name;
   const b = dayBuckets.get(key);
   if (!b || b.reset <= now) {
     dayBuckets.set(key, { n: 1, reset: now + 86400000 });
@@ -294,7 +294,7 @@ export default {
         const rows = await env.DB.prepare("SELECT x, y, color, agent, ts FROM pixels WHERE ts > ?").bind(since).all();
         return json(rows.results);
       }
-      if (!limited(request, 30, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limited(request, "pixels-read", 30, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
       if (pixelsCache && Date.now() - pixelsCache.ts < 3000) {
         return json(pixelsCache.data);
       }
@@ -334,7 +334,7 @@ export default {
     }
 
     if (path === "/api/thumbnail" && method === "GET") {
-      if (!limited(request, 30, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limited(request, "thumbnail", 30, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
       const size = Math.min(100, Math.max(1, Number(url.searchParams.get("size")) || 64));
       if (thumbCache && thumbCache.size === size && Date.now() - thumbCache.ts < 10000) {
         return json(thumbCache.data);
@@ -370,7 +370,7 @@ export default {
     }
 
     if (path === "/api/challenge" && method === "GET") {
-      if (!limited(request, 60, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limited(request, "challenge", 60, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
       const paused = await env.DB.prepare("SELECT value FROM settings WHERE key = 'paused'").first();
       if (paused && paused.value === "1") {
         return json({ error: "The canvas is paused right now. Try again later." }, 503);
@@ -387,8 +387,8 @@ export default {
     }
 
     if (path === "/api/pixels" && method === "POST") {
-      if (!limited(request, 10, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
-      if (!limitedDay(request, 500)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
+      if (!limited(request, "pixels", 10, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limitedDay(request, "pixels", 500)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
       if (!checkOrigin(request)) return json({ error: "Cross-origin requests are not allowed." }, 403);
 
       // emergency pause switch (set settings.paused = '1' in D1 to stop all writes)
