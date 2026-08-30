@@ -73,8 +73,9 @@ npx wrangler d1 execute mlnpx-db --remote --file scripts/epic.sql
 
 The canvas is public, so it is hardened against abuse and bill inflation:
 
-- **Global hourly budget.** Total pixel writes are capped per hour across every IP (default 10,000, set `PIXEL_BUDGET_PER_HOUR` to change it). A botnet can't blow past this no matter how many IPs it uses.
-- **Per-IP limits.** 600 pixels/min and 5000/day, 600 challenges/min, 30 thumbnails/min per IP. Limits are set high on purpose, so real drawing never trips them. The client also retries automatically on a rate-limit response. Abuse is capped by the global budget, the daily cap, and the proof-of-work, not by these limits.
+- **Global hourly budget.** Total pixel writes are capped per hour across every IP (default 500,000, set `PIXEL_BUDGET_PER_HOUR` to change it). This is a rate throttle, not a cost cap, so it's set high on purpose.
+- **Hard cost ceiling.** Once the canvas reaches `MAX_TOTAL_PIXELS` (default 1,000,000, the full grid), all writes stop. Because pixels are permanent, this is the absolute bound on total D1 write cost, which is effectively $0 for a full canvas.
+- **Per-IP limits.** 6,000 pixels/min and 20,000/day, 6,000 challenges/min, 30 thumbnails/min per IP. Limits are set high on purpose, so real drawing never trips them. The client also retries automatically on a rate-limit response. Abuse is capped by the global budget, the hard ceiling, the daily cap, and the proof-of-work.
 - **Read protection.** The thumbnail and full pixel list are cached, and the region endpoint is capped at 4096 cells, so heavy reads don't translate to heavy D1 cost.
 - **Kill switch.** Set `settings.paused = '1'` in D1 to stop all writes and challenges instantly, no redeploy needed:
   ```bash

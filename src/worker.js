@@ -321,6 +321,15 @@ async function backupNow(env) {
   return key;
 }
 
+// hard cost ceiling: once the canvas reaches MAX_TOTAL_PIXELS (default 1,000,000),
+// no more writes are accepted. Since the canvas is permanent, this is the absolute
+// bound on total D1 write cost.
+async function overPixelCap(env) {
+  const maxTotal = Number(env.MAX_TOTAL_PIXELS || GRID * GRID);
+  const total = await env.DB.prepare("SELECT COUNT(*) c FROM pixels").first();
+  return total.c >= maxTotal;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -427,6 +436,9 @@ export default {
       if (paused && paused.value === "1") {
         return json({ error: "The canvas is paused right now. Try again later." }, 503);
       }
+      if (await overPixelCap(env)) {
+        return json({ error: "The canvas has reached its pixel cap. No more pixels can be drawn." }, 503);
+      }
       await env.DB.prepare("DELETE FROM challenges WHERE expires < ?").bind(Date.now()).run();
       const c = newChallenge();
       await env.DB.prepare("INSERT INTO challenges (id, answer, expires) VALUES (?, ?, ?)")
@@ -465,8 +477,11 @@ export default {
       if (paused && paused.value === "1") {
         return json({ error: "The canvas is paused right now. Try again later." }, 503);
       }
+      if (await overPixelCap(env)) {
+        return json({ error: "The canvas has reached its pixel cap. No more pixels can be drawn." }, 503);
+      }
 
-      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 20000);
+      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 500000);
       const hub = env.REALTIME.get(env.REALTIME.idFromName("hub"));
       const b = await hub.fetch("https://realtime/budget", { method: "POST", body: JSON.stringify({ key: "pixels", max: budget, n: pixels.length }) });
       if (b.status === 429) {
@@ -525,9 +540,12 @@ export default {
       if (paused && paused.value === "1") {
         return json({ error: "The canvas is paused right now. Try again later." }, 503);
       }
+      if (await overPixelCap(env)) {
+        return json({ error: "The canvas has reached its pixel cap. No more pixels can be drawn." }, 503);
+      }
 
       // global write budget: caps total cost regardless of how many IPs a botnet uses
-      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 20000);
+      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 500000);
       const hub = env.REALTIME.get(env.REALTIME.idFromName("hub"));
       const b = await hub.fetch("https://realtime/budget", { method: "POST", body: JSON.stringify({ key: "pixels", max: budget }) });
       if (b.status === 429) {
