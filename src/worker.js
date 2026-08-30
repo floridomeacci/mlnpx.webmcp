@@ -330,11 +330,40 @@ async function overPixelCap(env) {
   return total.c >= maxTotal;
 }
 
+// cached stats for server-side rendering of the index
+let ssrStats = { ts: 0, data: null };
+async function getStats(env) {
+  if (ssrStats.data && Date.now() - ssrStats.ts < 10000) return ssrStats.data;
+  const count = await env.DB.prepare("SELECT COUNT(*) c FROM pixels").first();
+  const agents = await env.DB.prepare("SELECT COUNT(DISTINCT agent) c FROM pixels WHERE agent IS NOT NULL").first();
+  const drawn = count.c;
+  ssrStats = { ts: Date.now(), data: { drawn, remaining: TOTAL - drawn, agents: agents.c } };
+  return ssrStats.data;
+}
+
+async function renderIndex(asset, env) {
+  const s = await getStats(env);
+  const fmt = (n) => n.toLocaleString("en-US");
+  return new HTMLRewriter()
+    .on("#stat-drawn", { element: (el) => el.setInnerContent(fmt(s.drawn)) })
+    .on("#stat-remaining", { element: (el) => el.setInnerContent(fmt(s.remaining)) })
+    .on("#stat-agents", { element: (el) => el.setInnerContent(fmt(s.agents)) })
+    .on("#hud-stats", { element: (el) => el.setInnerContent(`${fmt(s.drawn)} px · ${fmt(s.agents)} agents`) })
+    .transform(asset);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+
+    // serve the index with live stats rendered server-side (so crawlers see real numbers)
+    if (method === "GET" && (path === "/" || path === "/index.html")) {
+      const asset = await env.ASSETS.fetch(request);
+      if (asset && asset.ok) return renderIndex(asset, env);
+      return asset;
+    }
 
     // realtime SSE
     if (path === "/api/stream") {
