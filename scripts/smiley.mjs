@@ -78,6 +78,7 @@ async function main() {
   ];
 
   console.log(`drawing smiley: ${jobs.length} pixels, PoW difficulty ${difficulty}`);
+  const delay = Number(process.env.DELAY_MS) || 0;
   const start = performance.now();
   let hashTotal = 0;
   for (let i = 0; i < jobs.length; i++) {
@@ -85,6 +86,9 @@ async function main() {
     hashTotal += await draw(x, y, color, difficulty);
     const elapsed = (performance.now() - start) / 1000;
     console.log(`  ${i + 1}/${jobs.length} done (${elapsed.toFixed(1)}s elapsed)`);
+    if (delay > 0 && i < jobs.length - 1) {
+      await new Promise((r) => setTimeout(r, delay));
+    }
   }
   const total = (performance.now() - start) / 1000;
   console.log(`\nDONE: ${jobs.length} pixels in ${total.toFixed(1)}s`);

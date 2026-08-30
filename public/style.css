@@ -74,6 +74,16 @@ body.dragging #canvas {
   color: var(--accent);
 }
 
+.tagline {
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 0;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
+}
+
 .logo {
   display: grid;
   grid-template-columns: repeat(2, 8px);
@@ -468,6 +478,10 @@ code {
   }
 
   .brand-name {
+    display: none;
+  }
+
+  .tagline {
     display: none;
   }
 }
