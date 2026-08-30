@@ -418,6 +418,76 @@ app.get("/api/pow", (_req, res) => {
   res.json({ difficulty: POW_DIFFICULTY });
 });
 
+app.post("/api/pixels/batch", checkOrigin, async (req, res) => {
+  const { pixels: batch, challenge_id, answer, sfw_ack, nonce, agent } = req.body ?? {};
+
+  if (!Array.isArray(batch) || batch.length < 1 || batch.length > 50) {
+    return res.status(400).json({ error: "pixels must be an array of 1 to 50 pixel objects." });
+  }
+  for (const p of batch) {
+    if (!p || !isValidPixel(p.x, p.y, p.color)) {
+      return res.status(400).json({
+        error: "Invalid pixel in batch. x/y must be integers in [0, 999] and color a #rrggbb hex string.",
+      });
+    }
+  }
+
+  const now = Date.now();
+  const rkey = (req.ip || "unknown") + ":pixels";
+  const rb = rateBuckets.get(rkey);
+  if (!rb || rb.resetAt <= now) {
+    rateBuckets.set(rkey, { count: batch.length, resetAt: now + 60000 });
+  } else {
+    rb.count += batch.length;
+    if (rb.count > 6000) {
+      return res.status(429).json({ error: "Too many requests. Slow down." });
+    }
+  }
+
+  if (!isSfwAck(sfw_ack)) {
+    return res.status(403).json({
+      error: "Missing SFW statement. Set sfw_ack to a short sentence confirming the design is safe for work and appropriate for all ages.",
+    });
+  }
+
+  if (challengeRequired(req)) {
+    const c = challenges.get(challenge_id);
+    if (!c || c.used || c.expiresAt < Date.now()) {
+      challenges.delete(challenge_id);
+      return res.status(403).json({
+        error: "No valid challenge. Call get_challenge first, then pass its id and your answer.",
+      });
+    }
+    if (!verifyAnswer(c, answer)) {
+      challenges.delete(challenge_id);
+      return res.status(403).json({
+        error: "Incorrect challenge answer. Call get_challenge for a fresh one and try again.",
+      });
+    }
+    if (nonce == null || !(await powOk(challenge_id, nonce, POW_DIFFICULTY))) {
+      return res.status(403).json({
+        error: "Proof of work failed. Call get_challenge for a fresh one and try again.",
+      });
+    }
+    c.used = true;
+  }
+
+  const cleanAgent = typeof agent === "string" && agent.trim() ? agent.trim().slice(0, 80) : null;
+  const ts = Date.now();
+  const drawnPixels = [];
+  for (const p of batch) {
+    const k = `${p.x},${p.y}`;
+    if (pixels.has(k)) continue;
+    const pixel = { x: p.x, y: p.y, color: p.color.toLowerCase(), agent: cleanAgent, ts };
+    pixels.set(k, pixel);
+    drawnPixels.push(pixel);
+    broadcast(pixel);
+  }
+  scheduleSave();
+
+  res.status(201).json({ success: true, drawn: drawnPixels.length, skipped: batch.length - drawnPixels.length, pixels: drawnPixels });
+});
+
 app.post("/api/pixels", rateLimit("pixels", 6000, 60000), checkOrigin, async (req, res) => {
   const { x, y, color, agent, challenge_id, answer, sfw_ack, nonce } = req.body ?? {};
   if (!isValidPixel(x, y, color)) {

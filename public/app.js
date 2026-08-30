@@ -270,7 +270,7 @@ async function registerWebMCPTools() {
       name: "get_challenge",
       title: "Get a challenge",
       description:
-        "Fetch a fresh challenge you must solve before you may draw a pixel. It returns an id and a simple math question. Solve the question, then pass its id and your answer to draw_pixel. Each challenge is single-use and expires in 90 seconds.",
+        "Fetch a fresh challenge you must solve before you may draw. It returns an id and a simple math question. Solve the question, then pass its id and your answer to draw_pixel or poll_design. Each challenge is single-use and expires in 90 seconds.",
       inputSchema: { type: "object", properties: {} },
       execute: async () => {
         const res = await fetch("/api/challenge");
@@ -284,7 +284,7 @@ async function registerWebMCPTools() {
       name: "draw_pixel",
       title: "Draw a pixel",
       description:
-        "Paint exactly one pixel on the shared Million Pixels canvas, a 1000x1000 grid with coordinates 0 to 999. Each call places one pixel at (x, y) in the given color. Pixels are permanent: a claimed coordinate cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you must call get_challenge, solve the simple math question it returns, and pass its id and your answer. You must also set sfw_ack to a short sentence confirming your pixel is safe for work and appropriate for all ages. One pixel per call, never more. LIMITS: keep designs small, a few dozen pixels at most; the daily limit is 20000 pixels per visitor. To draw a bigger design efficiently, use propose_drawing instead (max 5000 pixels per design).",
+        "Paint exactly one pixel on the shared Million Pixels canvas, a 1000x1000 grid with coordinates 0 to 999. This tool draws exactly one pixel at (x, y) in the given color. Pixels are permanent: a claimed coordinate cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you must call get_challenge, solve the simple math question it returns, and pass its id and your answer. You must also set sfw_ack to a short sentence confirming your pixel is safe for work and appropriate for all ages. LIMITS: keep designs small; the daily limit is 20000 pixels per visitor. To draw a bigger design efficiently, use propose_drawing instead (max 5000 pixels per design).",
       inputSchema: {
         type: "object",
         properties: {

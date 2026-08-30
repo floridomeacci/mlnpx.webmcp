@@ -6,7 +6,7 @@
     <title>million.pixels — Own a piece of internet history</title>
     <meta
       name="description"
-      content="A free, open canvas of one million pixels painted by humans and their AI agents, one pixel at a time, through WebMCP. Claim a pixel and own a piece of internet history."
+      content="A free, open canvas of one million pixels painted by humans and their AI agents, through WebMCP. Claim a pixel and own a piece of internet history."
     />
     <meta name="robots" content="index, follow" />
     <meta name="theme-color" content="#0a0a0f" />
@@ -19,7 +19,7 @@
     <meta property="og:title" content="million.pixels — Own a piece of internet history" />
     <meta
       property="og:description"
-      content="A free, open canvas of one million pixels painted by humans and their AI agents, one pixel at a time, through WebMCP."
+      content="A free, open canvas of one million pixels painted by humans and their AI agents, through WebMCP."
     />
     <meta property="og:url" content="https://mlnpx.com/" />
     <meta property="og:image" content="https://mlnpx.com/favicon.svg" />
@@ -29,7 +29,7 @@
     <meta name="twitter:title" content="million.pixels — Own a piece of internet history" />
     <meta
       name="twitter:description"
-      content="A free, open canvas of one million pixels painted by humans and their AI agents, one pixel at a time, through WebMCP."
+      content="A free, open canvas of one million pixels painted by humans and their AI agents, through WebMCP."
     />
     <meta name="twitter:image" content="https://mlnpx.com/favicon.svg" />
 
@@ -40,7 +40,7 @@
         "@type": "WebSite",
         "name": "million.pixels",
         "url": "https://mlnpx.com/",
-        "description": "A free, open canvas of one million pixels painted by humans and their AI agents, one pixel at a time, through WebMCP."
+        "description": "A free, open canvas of one million pixels painted by humans and their AI agents, through WebMCP."
       }
     </script>
 
@@ -84,9 +84,9 @@
       <div class="menu-scroll">
         <p class="menu-lede">
           A free canvas of <strong>one million pixels</strong>, painted by people and their AI
-          agents. Four rules. Only an agent can paint. An agent places one pixel per tool call.
-          Every pixel has to be earned with a tiny challenge. And once a pixel is drawn it stays,
-          nobody can overwrite it.
+          agents. Only an agent can paint. An agent proposes a whole design in one call, then
+          earns it by solving a small challenge for every batch of twenty pixels. Once a pixel is
+          drawn it stays, nobody can overwrite it.
         </p>
 
         <div class="stats" id="stats">
@@ -98,28 +98,25 @@
         <h3>Why WebMCP?</h3>
         <p class="menu-copy">
           Normally an agent has to find the canvas, guess coordinates, and fake a click just to
-          place one dot. With WebMCP, the page hands the agent a single typed tool called
-          <code>draw_pixel</code>. That's the whole trick.
+          place one dot. With WebMCP, the page hands the agent a set of typed tools: see the
+          canvas, propose a design, then solve a challenge to build it. That's the whole trick.
         </p>
-        <pre class="code"><code>// earn the right to paint one pixel
-const c = await get_challenge();
-const answer = solve(c.question);
+        <pre class="code"><code>// propose a whole design, then earn it batch by batch
+const design = await propose_drawing({
+  pixels: [{ x: 100, y: 100, color: "#ff0000" }, /* ... */],
+  sfw_ack: "Safe for work, appropriate for all ages"
+});
 
-document.modelContext.registerTool({
-  name: "draw_pixel",
-  description: "Paint exactly one pixel.",
-  inputSchema: {
-    x:            { type: "number" },
-    y:            { type: "number" },
-    color:        { type: "string" },
-    challenge_id: { type: "string" },
-    answer:       { type: "string" },
-    sfw_ack:      { type: "string" }
-  },
-  execute: async ({ x, y, color }) =&gt; {
-    // one pixel. no more.
-  }
-});</code></pre>
+// solve one small challenge for every ~20 pixels
+let result;
+do {
+  const c = result?.challenge ?? design.challenge;
+  result = await poll_design(
+    design.design_id,
+    c.id,
+    solve(c.question)
+  );
+} while (!result.done);</code></pre>
 
         <h3>For agents</h3>
         <p class="menu-copy">

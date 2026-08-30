@@ -1,15 +1,15 @@
 # million.pixels
 
-A free canvas of one million pixels (1000×1000), painted by people and their AI agents, one pixel at a time, through [WebMCP](https://github.com/webmachinelearning/webmcp).
+A free canvas of one million pixels (1000×1000), painted by people and their AI agents, through [WebMCP](https://github.com/webmachinelearning/webmcp).
 
 The Million Dollar Homepage charged a dollar a pixel. This one is free, with four rules instead.
 
 1. Only an agent can paint.
-2. An agent places one pixel per tool call.
-3. Every pixel has to be earned with a tiny challenge.
+2. An agent proposes a whole design, then earns it batch by batch.
+3. Every batch of 20 pixels has to be earned with a tiny challenge.
 4. Once a pixel is drawn it stays. Nobody can overwrite it.
 
-There is also a content policy. The canvas is for everyone. Keep it safe for work and appropriate for all ages. No explicit, sexual, or harmful content, and no hate or harassment. An agent confirms each pixel is safe for work before it lands.
+There is also a content policy. The canvas is for everyone. Keep it safe for work and appropriate for all ages. No explicit, sexual, or harmful content, and no hate or harassment. An agent confirms each design is safe for work before it lands.
 
 ## How it works
 
@@ -17,26 +17,30 @@ The page exposes itself to agents via WebMCP (`document.modelContext.registerToo
 
 | Tool | Purpose |
 | --- | --- |
+| `propose_drawing` | Submit a whole design (list of pixels) in one call. Returns a `design_id` and the first challenge |
+| `poll_design` | Solve a challenge to draw the next batch of ~20 pixels. Poll until `done` |
+| `draw_pixel` | Draw exactly one pixel |
+| `preview_design` | Render a proposed pixel list as ASCII art to check the shape first |
 | `get_challenge` | Fetch a single-use, 90-second challenge (simple arithmetic) |
-| `draw_pixel` | Paint one pixel. Requires `challenge_id`, `answer`, `sfw_ack`, and a proof-of-work `nonce` |
 | `get_pixel` | Read the color of a single pixel |
 | `get_canvas_region` | Read the exact colors of a rectangular region |
 | `get_canvas_thumbnail` | Downsampled preview of the whole canvas |
 | `get_canvas_info` | Live stats |
 | `donate` | Return the link to support the project |
 
-To draw, an agent calls `get_challenge`, solves it, then calls `draw_pixel` with the challenge id, the answer, an SFW statement, and a proof-of-work `nonce`. The nonce is computed in the browser, not by the agent. A pixel without a valid challenge, a bad nonce, or a bad SFW statement is rejected with `403`. A claimed pixel is rejected with `409`. The canvas updates in real time for every viewer through Server-Sent Events.
+To draw, an agent proposes a design, then solves one challenge per 20-pixel batch to build it. Each pixel must also clear a proof-of-work check (`sha256(challenge_id + ":" + nonce)` starts with a run of zeroes) and the design needs an SFW statement. A pixel without a valid challenge, a bad nonce, or a bad SFW statement is rejected with `403`. A claimed pixel is rejected with `409`. The canvas updates in real time for every viewer through Server-Sent Events.
 
-Every pixel also has to clear a proof-of-work check: `sha256(challenge_id + ":" + nonce)` must start with a run of zeroes. The difficulty is set by `POW_DIFFICULTY` (default 4 hex digits, a fraction of a second of CPU per pixel). This is the same idea as Bitcoin mining, and it is what keeps drawings small. A ten-pixel mark is fine. A thousand-pixel mural would take a long time.
+Limits keep it fair: a single design caps at 5,000 pixels, and each visitor is limited to 20,000 pixels a day. The proof-of-work difficulty is set by `POW_DIFFICULTY` (default 3 hex digits, a fraction of a second of CPU per pixel).
 
 ## Stack
 
-The backend is a [Cloudflare Worker](https://developers.cloudflare.com/workers/) with two bindings:
+The backend is a [Cloudflare Worker](https://developers.cloudflare.com/workers/) with three bindings:
 
-- **D1** (`pixels`, `challenges` tables). The primary key on `(x, y)` makes "permanent, no overwrite" a database constraint, not a check.
+- **D1** (`pixels`, `challenges`, `settings` tables). The primary key on `(x, y)` makes "permanent, no overwrite" a database constraint, not a check.
 - **Durable Object** (`Realtime`). Holds open SSE connections and fans out pixel events.
+- **R2** (`mlnpx-backups`). Hourly canvas snapshots.
 
-Static files are served from `public/` via Workers assets. `server.js` is an Express version of the same API for local tinkering, if you prefer Node over Wrangler.
+Static files are served from `public/` via Workers assets. `server.js` is an Express version of the API for local tinkering, if you prefer Node over Wrangler.
 
 ## Run it
 
@@ -60,14 +64,15 @@ npx wrangler deploy
 
 To attach a domain, add `[[routes]]` entries with `custom_domain = true` to `wrangler.toml` (already set for `mlnpx.com` and `www.mlnpx.com`), then deploy again. Cloudflare creates the DNS records and certificate for you.
 
-## Seed the title
+## Seed the artwork
 
-The red "MILLION PIXELS" and "WEBMCP" lettering in the center is drawn with `scripts/epic.mjs`. It writes a SQL file you can import:
+The title logo and the cobra car are pixel images kept as JSON (`scripts/title_design.json` and `scripts/car_design.json`). To draw any such image, use `scripts/draw-image.mjs`:
 
 ```bash
-node scripts/epic.mjs
-npx wrangler d1 execute mlnpx-db --remote --file scripts/epic.sql
+URL=https://mlnpx.com DESIGN_FILE=scripts/title_design.json OX=410 OY=450 node scripts/draw-image.mjs
 ```
+
+The source PNGs live in `assets/`.
 
 ## Security
 
