@@ -233,6 +233,7 @@ async function postPixel(x, y, color, agent, challengeId, answer, sfwAck) {
 // a proposed design is held in memory across tool calls so the agent can
 // submit it once and then poll it to completion by solving challenges.
 const BATCH_SIZE = 20;
+const MAX_DESIGN_PIXELS = 5000; // hard cap on a single drawing
 const DESIGN_TTL_MS = 10 * 60 * 1000; // unfinished designs expire after 10 minutes
 
 let pendingDesign = null;
@@ -283,7 +284,7 @@ async function registerWebMCPTools() {
       name: "draw_pixel",
       title: "Draw a pixel",
       description:
-        "Paint exactly one pixel on the shared Million Pixels canvas, a 1000x1000 grid with coordinates 0 to 999. Each call places one pixel at (x, y) in the given color. Pixels are permanent: a claimed coordinate cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you must call get_challenge, solve the simple math question it returns, and pass its id and your answer. You must also set sfw_ack to a short sentence confirming your pixel is safe for work and appropriate for all ages. One pixel per call, never more. Drawing is intentionally slow, each pixel takes about a second because of a background proof-of-work check, so plan a small design: a tiny shape, letter, or flag of a few dozen pixels at most.",
+        "Paint exactly one pixel on the shared Million Pixels canvas, a 1000x1000 grid with coordinates 0 to 999. Each call places one pixel at (x, y) in the given color. Pixels are permanent: a claimed coordinate cannot be overwritten, so check get_pixel first to find an empty spot. Before drawing you must call get_challenge, solve the simple math question it returns, and pass its id and your answer. You must also set sfw_ack to a short sentence confirming your pixel is safe for work and appropriate for all ages. One pixel per call, never more. LIMITS: keep designs small, a few dozen pixels at most; the daily limit is 20000 pixels per visitor. To draw a bigger design efficiently, use propose_drawing instead (max 5000 pixels per design).",
       inputSchema: {
         type: "object",
         properties: {
@@ -486,7 +487,7 @@ async function registerWebMCPTools() {
       name: "propose_drawing",
       title: "Propose a drawing",
       description:
-        "Submit a whole design in a single call. Pass a list of pixels (x, y, hex color) and an sfw_ack confirming the design is safe for work and appropriate for all ages. The pixels are drawn in order, line by line from top to bottom. This returns a design_id and the first challenge. Keep polling with poll_design and solving each challenge until the design is complete.",
+        "Submit a whole design in a single call. Pass a list of pixels (x, y, hex color) and an sfw_ack confirming the design is safe for work and appropriate for all ages. LIMITS: a design can be at most 5000 pixels (call this fails with an error if you exceed it), and each visitor is limited to 20000 pixels per day. Every 20 pixels requires one solved challenge, and each pixel takes roughly half a second, so keep designs small, tens or a few hundred pixels. The pixels are drawn in order, line by line from top to bottom. Returns a design_id and the first challenge; keep polling with poll_design and solving each challenge until done.",
       inputSchema: {
         type: "object",
         properties: {
@@ -513,6 +514,9 @@ async function registerWebMCPTools() {
       execute: async ({ pixels, sfw_ack, agent }) => {
         const sorted = [...(pixels || [])].sort((a, b) => a.y - b.y || a.x - b.x);
         if (!sorted.length) return { success: false, error: "No pixels provided." };
+        if (sorted.length > MAX_DESIGN_PIXELS) {
+          return { success: false, error: `This design is ${sorted.length} pixels, but the maximum is ${MAX_DESIGN_PIXELS}. Make it smaller and try again.` };
+        }
         designCounter++;
         const c = await fetchChallenge();
         pendingDesign = {
