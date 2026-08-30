@@ -676,6 +676,61 @@ window.addEventListener("mouseup", () => {
   document.body.classList.remove("dragging");
 });
 
+// touch: one finger pans, two fingers pinch-zoom
+let touchList = [];
+let pinchDist = 0;
+
+canvas.addEventListener("touchstart", (evt) => {
+  evt.preventDefault();
+  needsFit = false;
+  touchList = [...evt.touches];
+  if (touchList.length === 1) {
+    dragging = true;
+    lastX = touchList[0].clientX;
+    lastY = touchList[0].clientY;
+    document.body.classList.add("dragging");
+  } else if (touchList.length === 2) {
+    dragging = false;
+    document.body.classList.remove("dragging");
+    pinchDist = Math.hypot(touchList[0].clientX - touchList[1].clientX, touchList[0].clientY - touchList[1].clientY);
+  }
+}, { passive: false });
+
+canvas.addEventListener("touchmove", (evt) => {
+  evt.preventDefault();
+  touchList = [...evt.touches];
+  if (touchList.length === 1 && dragging) {
+    view.ox += touchList[0].clientX - lastX;
+    view.oy += touchList[0].clientY - lastY;
+    lastX = touchList[0].clientX;
+    lastY = touchList[0].clientY;
+    hideHint();
+    render();
+  } else if (touchList.length === 2) {
+    const d = Math.hypot(touchList[0].clientX - touchList[1].clientX, touchList[0].clientY - touchList[1].clientY);
+    if (pinchDist > 0) {
+      const cx = (touchList[0].clientX + touchList[1].clientX) / 2;
+      const cy = (touchList[0].clientY + touchList[1].clientY) / 2;
+      const newScale = Math.min(64, Math.max(minScale(), view.scale * (d / pinchDist)));
+      view.ox = cx - ((cx - view.ox) / view.scale) * newScale;
+      view.oy = cy - ((cy - view.oy) / view.scale) * newScale;
+      view.scale = newScale;
+      hideHint();
+      render();
+    }
+    pinchDist = d;
+  }
+}, { passive: false });
+
+canvas.addEventListener("touchend", (evt) => {
+  touchList = [...evt.touches];
+  if (touchList.length <= 1) {
+    dragging = false;
+    document.body.classList.remove("dragging");
+    pinchDist = 0;
+  }
+});
+
 canvas.addEventListener("mousemove", (evt) => {
   if (dragging) {
     tooltip.hidden = true;
@@ -779,16 +834,16 @@ document.addEventListener("keydown", (evt) => {
 
 const PROMPT_TEMPLATE =
   "You're looking at the Million Pixels canvas, a free 1000×1000 grid of pixels. " +
-  "Your job is to draw something small on it with the `draw_pixel` tool. Four rules. " +
-  "One, place only ONE pixel per tool call. " +
-  "Two, earn each pixel: call `get_challenge`, solve the simple math question it gives you, " +
-  "then pass that challenge's id and your answer to `draw_pixel`. " +
-  "Three, pixels are permanent, so use `get_pixel` to check a spot is empty before you paint it. " +
-  "Four, keep it appropriate for all ages. When you call `draw_pixel`, set `sfw_ack` to a short " +
-  "sentence confirming your pixel is safe for work. " +
-  "Heads up: drawing is intentionally slow. Each pixel takes about a second, so keep your design " +
-  "tiny, a shape, letter, or flag of a few dozen pixels at most. " +
-  "Start by calling `get_canvas_info` to see the canvas, then paint one pixel at a time.";
+  "Your job is to draw something small on it. Four rules. " +
+  "One, pixels are permanent, so use `get_pixel` or `get_canvas_region` to find an empty spot first. " +
+  "Two, every pixel has to be earned: call `get_challenge`, solve the simple math question, " +
+  "then pass the challenge id and your answer when you draw. " +
+  "Three, keep it appropriate for all ages, and confirm each design is safe for work with an sfw_ack. " +
+  "Four, keep it small. For a tiny mark of a few dozen pixels use `draw_pixel` one at a time. " +
+  "For anything bigger, use `propose_drawing` to submit the whole design once, then `poll_design` " +
+  "solving one challenge per 20 pixels until it is done. A design can be at most 5000 pixels, and " +
+  "each visitor is limited to 20000 pixels per day. Start by calling `get_canvas_info` to see the " +
+  "canvas, then paint something small: a shape, a letter, a flag.";
 
 function buildPrompt() {
   const name = document.getElementById("agent-name").value.trim();

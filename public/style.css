@@ -31,6 +31,7 @@ body {
   display: block;
   image-rendering: pixelated;
   cursor: grab;
+  touch-action: none;
 }
 
 body.dragging #canvas {
@@ -85,19 +86,15 @@ body.dragging #canvas {
 }
 
 .logo {
-  display: grid;
-  grid-template-columns: repeat(2, 8px);
-  grid-template-rows: repeat(2, 8px);
-  gap: 2px;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  color: #1a0e02;
+  background: var(--accent);
+  border-radius: 7px;
+  padding: 6px 7px;
 }
-
-.px {
-  border-radius: 2px;
-}
-
-.px1 { background: #ffffff; }
-.px2 { background: var(--accent2); }
-.px3 { background: var(--accent); grid-column: 1 / -1; height: 4px; }
 
 .hud-right {
   display: flex;
