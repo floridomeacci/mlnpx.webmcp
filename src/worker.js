@@ -391,7 +391,7 @@ export default {
     }
 
     if (path === "/api/challenge" && method === "GET") {
-      if (!limited(request, "challenge", 120, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limited(request, "challenge", 600, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
       const paused = await env.DB.prepare("SELECT value FROM settings WHERE key = 'paused'").first();
       if (paused && paused.value === "1") {
         return json({ error: "The canvas is paused right now. Try again later." }, 503);
@@ -408,7 +408,7 @@ export default {
     }
 
     if (path === "/api/pixels" && method === "POST") {
-      if (!limited(request, "pixels", 120, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
+      if (!limited(request, "pixels", 600, 60000)) return json({ error: "Too many requests. Slow down." }, 429);
       if (!limitedDay(request, "pixels", 5000)) return json({ error: "Daily limit reached. Come back tomorrow." }, 429);
       if (!checkOrigin(request)) return json({ error: "Cross-origin requests are not allowed." }, 403);
 

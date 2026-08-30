@@ -129,6 +129,7 @@ async function main() {
     return [x, y, color];
   });
   console.log(`drawing cobra car at (${OX},${OY}): ${jobs.length} pixels`);
+  const delay = Number(process.env.DELAY_MS) || 600;
   const start = performance.now();
   for (let i = 0; i < jobs.length; i++) {
     const [x, y, color] = jobs[i];
@@ -136,6 +137,9 @@ async function main() {
     if ((i + 1) % 50 === 0 || i === jobs.length - 1) {
       const e = (performance.now() - start) / 1000;
       console.log(`  ${i + 1}/${jobs.length} (${e.toFixed(0)}s)`);
+    }
+    if (delay > 0 && i < jobs.length - 1) {
+      await new Promise((r) => setTimeout(r, delay));
     }
   }
   console.log(`done in ${((performance.now() - start) / 1000).toFixed(0)}s`);

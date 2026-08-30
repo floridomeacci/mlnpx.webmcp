@@ -207,12 +207,19 @@ async function computePow(challengeId) {
 
 async function drawPixel(x, y, color, agent, challengeId, answer, sfwAck) {
   const nonce = await computePow(challengeId);
-  const res = await fetch("/api/pixels", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ x, y, color, agent, challenge_id: challengeId, answer, sfw_ack: sfwAck, nonce }),
-  });
-  const data = await res.json();
+  const body = JSON.stringify({ x, y, color, agent, challenge_id: challengeId, answer, sfw_ack: sfwAck, nonce });
+  let res;
+  let data;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    res = await fetch("/api/pixels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    data = await res.json();
+    if (res.status !== 429) break;
+    await new Promise((r) => setTimeout(r, 1200));
+  }
   if (!res.ok) {
     throw new Error(data.error || "Failed to draw pixel");
   }
