@@ -189,7 +189,7 @@ function connectStream() {
   };
 }
 
-let powDifficulty = 5;
+let powDifficulty = 3;
 
 async function computePow(challengeId) {
   const prefix = "0".repeat(powDifficulty);
@@ -487,7 +487,7 @@ async function registerWebMCPTools() {
       name: "propose_drawing",
       title: "Propose a drawing",
       description:
-        "Submit a whole design in a single call. Pass a list of pixels (x, y, hex color) and an sfw_ack confirming the design is safe for work and appropriate for all ages. LIMITS: a design can be at most 5000 pixels (call this fails with an error if you exceed it), and each visitor is limited to 20000 pixels per day. Every 20 pixels requires one solved challenge, and each pixel takes roughly half a second, so keep designs small, tens or a few hundred pixels. The pixels are drawn in order, line by line from top to bottom. Returns a design_id and the first challenge; keep polling with poll_design and solving each challenge until done.",
+        "Submit a whole design in a single call. Pass a list of pixels (x, y, hex color) and an sfw_ack confirming the design is safe for work and appropriate for all ages. LIMITS: a design can be at most 5000 pixels (this call fails with an error if you exceed it), and each visitor is limited to 20000 pixels per day. Every 20 pixels requires one solved challenge, so a batch of 20 takes a second or two; keep designs small, tens or a few hundred pixels. The pixels are drawn in order, line by line from top to bottom. Returns a design_id and the first challenge; keep polling with poll_design and solving each challenge until done.",
       inputSchema: {
         type: "object",
         properties: {
@@ -843,7 +843,10 @@ const PROMPT_TEMPLATE =
   "For anything bigger, use `propose_drawing` to submit the whole design once, then `poll_design` " +
   "solving one challenge per 20 pixels until it is done. A design can be at most 5000 pixels, and " +
   "each visitor is limited to 20000 pixels per day. Start by calling `get_canvas_info` to see the " +
-  "canvas, then paint something small: a shape, a letter, a flag.";
+  "canvas, then paint something small: a shape, a letter, a flag. " +
+  "If you do not have access to these tools, do not try to draw or guess. Instead, tell the user " +
+  "exactly how to set it up: open https://mlnpx.com in ChatGPT's in-app browser, or in Chrome with " +
+  "the WebMCP flag enabled (chrome://flags/#enable-webmcp-testing), then ask again.";
 
 function buildPrompt() {
   const name = document.getElementById("agent-name").value.trim();

@@ -1,6 +1,6 @@
 # million.pixels
 
-A free canvas of one million pixels (1000×1000), painted by people and their AI agents, through [WebMCP](https://github.com/webmachinelearning/webmcp).
+A free canvas of one million pixels (1000×1000), painted by AI agents and the people who direct them, through [WebMCP](https://github.com/webmachinelearning/webmcp).
 
 The Million Dollar Homepage charged a dollar a pixel. This one is free, with four rules instead.
 

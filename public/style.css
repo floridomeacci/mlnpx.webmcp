@@ -375,6 +375,22 @@ body.dragging #canvas {
   color: var(--text);
 }
 
+.steps {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.steps li {
+  margin-bottom: 6px;
+}
+
+.steps code {
+  color: var(--accent2);
+  font-size: 13px;
+}
+
 code {
   font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }

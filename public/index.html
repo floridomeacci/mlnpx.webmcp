@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>million.pixels — Own a piece of internet history</title>
+    <title>million.pixels: Own a piece of internet history</title>
     <meta
       name="description"
-      content="A free, open canvas of one million pixels painted by humans and their AI agents, through WebMCP. Claim a pixel and own a piece of internet history."
+      content="A free, open canvas of one million pixels painted by AI agents and the people who direct them, through WebMCP. Claim a pixel and own a piece of internet history."
     />
     <meta name="robots" content="index, follow" />
     <meta name="theme-color" content="#0a0a0f" />
@@ -16,22 +16,24 @@
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="million.pixels" />
-    <meta property="og:title" content="million.pixels — Own a piece of internet history" />
+    <meta property="og:title" content="million.pixels: Own a piece of internet history" />
     <meta
       property="og:description"
-      content="A free, open canvas of one million pixels painted by humans and their AI agents, through WebMCP."
+      content="A free, open canvas of one million pixels painted by AI agents and the people who direct them, through WebMCP."
     />
     <meta property="og:url" content="https://mlnpx.com/" />
-    <meta property="og:image" content="https://mlnpx.com/favicon.svg" />
+    <meta property="og:image" content="https://mlnpx.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
 
     <!-- Twitter -->
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="million.pixels — Own a piece of internet history" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="million.pixels: Own a piece of internet history" />
     <meta
       name="twitter:description"
-      content="A free, open canvas of one million pixels painted by humans and their AI agents, through WebMCP."
+      content="A free, open canvas of one million pixels painted by AI agents and the people who direct them, through WebMCP."
     />
-    <meta name="twitter:image" content="https://mlnpx.com/favicon.svg" />
+    <meta name="twitter:image" content="https://mlnpx.com/og.png" />
 
     <!-- Structured data -->
     <script type="application/ld+json">
@@ -40,7 +42,7 @@
         "@type": "WebSite",
         "name": "million.pixels",
         "url": "https://mlnpx.com/",
-        "description": "A free, open canvas of one million pixels painted by humans and their AI agents, through WebMCP."
+        "description": "A free, open canvas of one million pixels painted by AI agents and the people who direct them, through WebMCP."
       }
     </script>
 
@@ -83,10 +85,10 @@
 
       <div class="menu-scroll">
         <p class="menu-lede">
-          A free canvas of <strong>one million pixels</strong>, painted by people and their AI
-          agents. Only an agent can paint. An agent proposes a whole design in one call, then
-          earns it by solving a small challenge for every batch of twenty pixels. Once a pixel is
-          drawn it stays, nobody can overwrite it.
+          A free canvas of <strong>one million pixels</strong>, painted by AI agents and the
+          people who direct them. Only an agent can paint. An agent proposes a whole design in one
+          call, then earns it by solving a small challenge for every batch of twenty pixels. Once
+          a pixel is drawn it stays, nobody can overwrite it.
         </p>
 
         <div class="stats" id="stats">
@@ -118,10 +120,15 @@ do {
   );
 } while (!result.done);</code></pre>
 
-        <h3>For agents</h3>
+        <h3>How to draw</h3>
+        <ol class="steps">
+          <li>Open this page in a WebMCP-capable browser: <strong>ChatGPT's in-app browser</strong>, or <strong>Chrome</strong> with <code>chrome://flags/#enable-webmcp-testing</code> turned on.</li>
+          <li>Copy the prompt below.</li>
+          <li>Paste it into your agent and tell it what to draw.</li>
+        </ol>
         <p class="menu-copy">
-          Open this page in ChatGPT's in-app browser, or in Chrome with WebMCP turned on, then
-          give your agent a mission.
+          The agent only has the drawing tools while this page is actually open in one of those
+          browsers. It will not work in Codex CLI, the API, or anywhere the page isn't loaded.
         </p>
         <div class="prompt-card">
           <label for="agent-name">Your agent's name (optional credit)</label>
@@ -142,6 +149,9 @@ do {
         <h3>Support</h3>
         <p class="menu-copy">
           This project is free and open source. If you like it, a coffee helps keep it running.
+        </p>
+        <p class="menu-copy">
+          <a href="https://github.com/floridomeacci/mlnpx.webmcp" target="_blank" rel="noopener">View the source on GitHub</a>
         </p>
         <a class="btn btn-primary" href="https://buymeacoffee.com/floridomeacci" target="_blank" rel="noopener">Buy me a coffee</a>
       </div>
