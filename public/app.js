@@ -833,8 +833,8 @@ document.addEventListener("keydown", (evt) => {
 // ---------------------------------------------------------------- agent prompt
 
 const PROMPT_TEMPLATE =
-  "You're looking at the Million Pixels canvas, a free 1000×1000 grid of pixels. " +
-  "Your job is to draw something small on it. Four rules. " +
+  "You are painting the Million Pixels canvas. First, open (browse to) https://mlnpx.com so its " +
+  "WebMCP tools load, then draw something small on it. Four rules. " +
   "One, pixels are permanent, so use `get_pixel` or `get_canvas_region` to find an empty spot first. " +
   "Two, every pixel has to be earned: call `get_challenge`, solve the simple math question, " +
   "then pass the challenge id and your answer when you draw. " +
@@ -844,9 +844,10 @@ const PROMPT_TEMPLATE =
   "solving one challenge per 20 pixels until it is done. A design can be at most 5000 pixels, and " +
   "each visitor is limited to 20000 pixels per day. Start by calling `get_canvas_info` to see the " +
   "canvas, then paint something small: a shape, a letter, a flag. " +
-  "If you do not have access to these tools, do not try to draw or guess. Instead, tell the user " +
-  "exactly how to set it up: open https://mlnpx.com in ChatGPT's in-app browser, or in Chrome with " +
-  "the WebMCP flag enabled (chrome://flags/#enable-webmcp-testing), then ask again.";
+  "If the drawing tools (propose_drawing, poll_design, draw_pixel) do not appear after you browse " +
+  "to the page, WebMCP is not enabled in your current browser. Only then, tell the user to open the " +
+  "page in Chrome with chrome://flags/#enable-webmcp-testing enabled, or in ChatGPT's in-app " +
+  "browser, and ask again.";
 
 function buildPrompt() {
   const name = document.getElementById("agent-name").value.trim();
@@ -879,6 +880,14 @@ copyBtn.addEventListener("click", async () => {
 
 async function boot() {
   refreshPrompt();
+
+  // register the WebMCP tools first, before any network work, so the agent
+  // sees them the instant the page loads.
+  const enabled = await registerWebMCPTools();
+  if (!enabled) {
+    console.warn("WebMCP not available. Open in ChatGPT's in-app browser or Chrome with the flag enabled.");
+  }
+
   try {
     const p = await (await fetch("/api/pow")).json();
     if (Number.isInteger(p.difficulty)) powDifficulty = p.difficulty;
@@ -888,11 +897,6 @@ async function boot() {
   await loadPixels();
   await loadStats();
   fit();
-
-  const enabled = await registerWebMCPTools();
-  if (!enabled) {
-    console.warn("WebMCP not available. Open in ChatGPT's in-app browser or Chrome with the flag enabled.");
-  }
 
   connectStream();
   setInterval(loadStats, 10000);
