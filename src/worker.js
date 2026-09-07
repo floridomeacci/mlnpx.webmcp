@@ -5,12 +5,6 @@ const CHALLENGE_TTL = 90_000;
 
 // ---------------------------------------------------------------- challenges
 
-const COLOR_NAMES = {
-  "#ff0000": "red", "#00ff00": "lime", "#0000ff": "blue", "#ffff00": "yellow",
-  "#ff00ff": "magenta", "#00ffff": "cyan", "#ffffff": "white", "#000000": "black",
-  "#ffa500": "orange", "#800080": "purple", "#ffc0cb": "pink", "#808080": "gray",
-};
-
 function rand(n) {
   return Math.floor(Math.random() * n);
 }
@@ -33,43 +27,6 @@ function gMath() {
   return { question: `Solve and reply with just the number: ${a} × ${b} = ?`, answer: String(answer), kind: "math" };
 }
 
-function gColorName() {
-  const [hex, name] = pick(Object.entries(COLOR_NAMES));
-  return { question: `Name this color in one word: ${hex}.`, answer: name, kind: "color" };
-}
-
-function gColorHex() {
-  const [hex, name] = pick(Object.entries(COLOR_NAMES));
-  return { question: `Give the hex code (like #rrggbb) for the color "${name}".`, answer: hex, kind: "color" };
-}
-function gCanvas() {
-  const kind = rand(3);
-  if (kind === 0) {
-    const rows = rand(40) + 2;
-    return { question: `How many pixels are in ${rows} rows of this ${GRID}-wide canvas? (just the number)`, answer: String(rows * GRID), kind: "canvas" };
-  }
-  if (kind === 1) {
-    const n = rand(GRID - 2) + 1;
-    return { question: `A row holds ${GRID} pixels and ${n} are already painted. How many are still empty in that row? (just the number)`, answer: String(GRID - n), kind: "canvas" };
-  }
-  const pct = [10, 20, 25, 40, 50, 75, 80][rand(7)];
-  return { question: `If ${pct}% of the ${TOTAL.toLocaleString("en-US")}-pixel canvas is filled, how many pixels is that? (just the number)`, answer: String((TOTAL * pct) / 100), kind: "canvas" };
-}
-
-function gCoordinate() {
-  const kind = rand(3);
-  if (kind === 0) {
-    return { question: "On this canvas, does y=0 sit at the top or the bottom?", answer: "top", kind: "coordinate" };
-  }
-  if (kind === 1) {
-    const a = rand(GRID - 100);
-    const n = rand(GRID - 1 - a) + 1;
-    return { question: `A pixel is at column ${a}. Which column is ${n} columns to its right? (just the number)`, answer: String(a + n), kind: "coordinate" };
-  }
-  const a = rand(GRID - 100);
-  const n = rand(GRID - 1 - a) + 1;
-  return { question: `A pixel is at row ${a}. Which row is ${n} rows below it? (just the number)`, answer: String(a + n), kind: "coordinate" };
-}
 const GENERATORS = [gMath];
 
 function newChallenge() {
@@ -181,7 +138,6 @@ export class Realtime {
     this.state = state;
     this.env = env;
     this.clients = new Set();
-    this.counts = new Map(); // "pixels:<hourKey>" -> count
   }
 
   async fetch(request) {
@@ -196,34 +152,10 @@ export class Realtime {
       for (const p of pixels) await this.broadcast(p);
       return new Response("ok");
     }
-    if (url.pathname === "/budget") {
-      const body = await request.json();
-      return this.checkBudget(body);
-    }
     if (url.pathname === "/api/stream") {
       return this.serveStream(request);
     }
     return new Response("not found", { status: 404 });
-  }
-
-  checkBudget({ key, max, n }) {
-    const amount = Number(n) || 1;
-    const hourKey = Math.floor(Date.now() / 3600000);
-    const k = key + ":" + hourKey;
-    const count = (this.counts.get(k) || 0) + amount;
-    this.counts.set(k, count);
-    if (this.counts.size > 100) {
-      const cutoff = hourKey - 2;
-      for (const ck of this.counts.keys()) {
-        const last = Number(ck.slice(ck.lastIndexOf(":") + 1));
-        if (last < cutoff) this.counts.delete(ck);
-      }
-    }
-    const ok = count <= max;
-    return new Response(JSON.stringify({ ok, count, max }), {
-      status: ok ? 200 : 429,
-      headers: { "Content-Type": "application/json" },
-    });
   }
 
   serveStream(request) {
@@ -330,6 +262,18 @@ async function overPixelCap(env) {
   return total.c >= maxTotal;
 }
 
+// durable hourly budget: the counter lives in D1, so it survives restarts/eviction.
+async function checkBudget(env, n) {
+  const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 500000);
+  const amount = Number(n) || 1;
+  const hour = Math.floor(Date.now() / 3600000);
+  await env.DB.prepare(
+    "INSERT INTO budget (hour, count) VALUES (?, ?) ON CONFLICT(hour) DO UPDATE SET count = count + ?"
+  ).bind(hour, amount, amount).run();
+  const row = await env.DB.prepare("SELECT count FROM budget WHERE hour = ?").bind(hour).first();
+  return (row.count || 0) <= budget;
+}
+
 // full pixel list, cached in R2 and revalidated via MAX(ts) (indexed). This avoids
 // a full D1 scan on every page load; the scan only runs when the canvas changed.
 async function getFullPixels(env) {
@@ -357,15 +301,43 @@ async function getFullPixels(env) {
   return list;
 }
 
-// cached stats for server-side rendering of the index
-let ssrStats = { ts: 0, data: null };
+// cached stats (drawn + agents), used by SSR and /api/stats. In-memory fast path,
+// in-flight dedup to avoid a thundering herd, then R2 keyed by MAX(ts) so the
+// expensive COUNT(DISTINCT agent) scan only runs when the canvas changed.
+let ssrStats = { ts: 0, data: null, inflight: null };
 async function getStats(env) {
   if (ssrStats.data && Date.now() - ssrStats.ts < 10000) return ssrStats.data;
-  const count = await env.DB.prepare("SELECT COUNT(*) c FROM pixels").first();
-  const agents = await env.DB.prepare("SELECT COUNT(DISTINCT agent) c FROM pixels WHERE agent IS NOT NULL").first();
-  const drawn = count.c;
-  ssrStats = { ts: Date.now(), data: { drawn, remaining: TOTAL - drawn, agents: agents.c } };
-  return ssrStats.data;
+  if (ssrStats.inflight) return ssrStats.inflight;
+
+  ssrStats.inflight = (async () => {
+    const latest = await env.DB.prepare("SELECT MAX(ts) m FROM pixels").first();
+    const version = Number(latest.m) || 0;
+    try {
+      const obj = await env.BACKUPS.get("cache/stats.json");
+      if (obj && obj.customMetadata && Number(obj.customMetadata.version) === version) {
+        const d = await obj.json();
+        ssrStats = { ts: Date.now(), data: d, inflight: null };
+        return d;
+      }
+    } catch {
+      /* cache miss */
+    }
+
+    const count = await env.DB.prepare("SELECT COUNT(*) c FROM pixels").first();
+    const agents = await env.DB.prepare("SELECT COUNT(DISTINCT agent) c FROM pixels WHERE agent IS NOT NULL").first();
+    const d = { drawn: count.c, remaining: TOTAL - count.c, agents: agents.c };
+    try {
+      await env.BACKUPS.put("cache/stats.json", JSON.stringify(d), {
+        customMetadata: { version: String(version) },
+      });
+    } catch {
+      /* ignore cache write errors */
+    }
+    ssrStats = { ts: Date.now(), data: d, inflight: null };
+    return d;
+  })();
+
+  return ssrStats.inflight;
 }
 
 async function renderIndex(asset, env) {
@@ -535,10 +507,7 @@ export default {
         return json({ error: "The canvas has reached its pixel cap. No more pixels can be drawn." }, 503);
       }
 
-      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 500000);
-      const hub = env.REALTIME.get(env.REALTIME.idFromName("hub"));
-      const b = await hub.fetch("https://realtime/budget", { method: "POST", body: JSON.stringify({ key: "pixels", max: budget, n: pixels.length }) });
-      if (b.status === 429) {
+      if (!(await checkBudget(env, pixels.length))) {
         return json({ error: "The canvas is resting. Too many pixels this hour, try again soon." }, 503);
       }
 
@@ -578,6 +547,7 @@ export default {
       });
 
       if (drawnPixels.length) {
+        const hub = env.REALTIME.get(env.REALTIME.idFromName("hub"));
         ctx.waitUntil(hub.fetch("https://realtime/broadcast-many", { method: "POST", body: JSON.stringify(drawnPixels) }));
       }
 
@@ -599,10 +569,7 @@ export default {
       }
 
       // global write budget: caps total cost regardless of how many IPs a botnet uses
-      const budget = Number(env.PIXEL_BUDGET_PER_HOUR || 500000);
-      const hub = env.REALTIME.get(env.REALTIME.idFromName("hub"));
-      const b = await hub.fetch("https://realtime/budget", { method: "POST", body: JSON.stringify({ key: "pixels", max: budget }) });
-      if (b.status === 429) {
+      if (!(await checkBudget(env, 1))) {
         return json({ error: "The canvas is resting. Too many pixels this hour, try again soon." }, 503);
       }
 
@@ -656,6 +623,7 @@ export default {
       }
 
       // realtime broadcast (fire-and-forget)
+      const hub = env.REALTIME.get(env.REALTIME.idFromName("hub"));
       ctx.waitUntil(hub.fetch("https://realtime/broadcast", { method: "POST", body: JSON.stringify(pixel) }));
 
       return json({ success: true, pixel }, 201);
