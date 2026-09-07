@@ -330,6 +330,33 @@ async function overPixelCap(env) {
   return total.c >= maxTotal;
 }
 
+// full pixel list, cached in R2 and revalidated via MAX(ts) (indexed). This avoids
+// a full D1 scan on every page load; the scan only runs when the canvas changed.
+async function getFullPixels(env) {
+  const latest = await env.DB.prepare("SELECT MAX(ts) m FROM pixels").first();
+  const version = Number(latest.m) || 0;
+
+  try {
+    const obj = await env.BACKUPS.get("cache/pixels.json");
+    if (obj && obj.customMetadata && Number(obj.customMetadata.version) === version) {
+      return await obj.json();
+    }
+  } catch {
+    /* cache miss */
+  }
+
+  const rows = await env.DB.prepare("SELECT x, y, color, agent, ts FROM pixels").all();
+  const list = rows.results;
+  try {
+    await env.BACKUPS.put("cache/pixels.json", JSON.stringify(list), {
+      customMetadata: { version: String(version) },
+    });
+  } catch {
+    /* ignore cache write errors */
+  }
+  return list;
+}
+
 // cached stats for server-side rendering of the index
 let ssrStats = { ts: 0, data: null };
 async function getStats(env) {
@@ -388,9 +415,9 @@ export default {
       if (pixelsCache && Date.now() - pixelsCache.ts < 3000) {
         return json(pixelsCache.data);
       }
-      const rows = await env.DB.prepare("SELECT x, y, color, agent, ts FROM pixels").all();
-      pixelsCache = { ts: Date.now(), data: rows.results };
-      return json(rows.results);
+      const list = await getFullPixels(env);
+      pixelsCache = { ts: Date.now(), data: list };
+      return json(list);
     }
 
     if (path === "/api/pixel" && method === "GET") {
