@@ -399,10 +399,8 @@ export default {
     }
 
     if (path === "/api/stats" && method === "GET") {
-      const count = await env.DB.prepare("SELECT COUNT(*) c FROM pixels").first();
-      const agents = await env.DB.prepare("SELECT COUNT(DISTINCT agent) c FROM pixels WHERE agent IS NOT NULL").first();
-      const drawn = count.c;
-      return json({ gridSize: GRID, total: TOTAL, drawn, agents: agents.c, remaining: TOTAL - drawn });
+      const s = await getStats(env);
+      return json({ gridSize: GRID, total: TOTAL, drawn: s.drawn, agents: s.agents, remaining: s.remaining });
     }
 
     if (path === "/api/pixels" && method === "GET") {
